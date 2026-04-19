@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "climate-relay-core"
+version = "0.1.0"
+description = "A backend-first climate control framework for Home Assistant with a generic thermostat model."
+readme = "README.md"
+requires-python = ">=3.14.2"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "bm" },
+]
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "build>=1.2.2",
+  "coverage[toml]>=7.8.0",
+  "homeassistant>=2026.4.2",
+  "pytest>=8.3.0",
+  "pytest-cov>=6.1.0",
+  "ruff>=0.11.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["custom_components/climate_relay_core"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --cov=custom_components/climate_relay_core --cov-branch --cov-report=term-missing --cov-report=xml"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["custom_components/climate_relay_core"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["frontend/dist", "frontend/node_modules"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "SIM",
+]

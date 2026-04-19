@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up ClimateRelayCore",
+        "description": "Create the initial configuration entry for the integration.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  }
+}
