@@ -44,6 +44,7 @@ Every backend iteration is expected to satisfy the same checks locally and in CI
 
 - [Discovery](./docs/discovery.md)
 - [Requirements](./docs/requirements.md)
+- [Verification Matrix](./docs/verification-matrix.md)
 - [Rules](./docs/rules.md)
 - [Architecture](./docs/architecture.md)
 - [Engineering Standards](./docs/engineering-standards.md)
