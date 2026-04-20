@@ -4,6 +4,14 @@
 
 These rules are repository-wide and intended to remain stable over time.
 
+- Develop every increment test-first.
+- Start each required behavior with a failing automated test or executable
+  specification.
+- Apply professional, language-specific engineering practices according to the
+  current state of the art.
+- Apply `SOLID` and Clean Code principles independent of programming language.
+- Treat enterprise-grade source code and test quality as the baseline
+  expectation.
 - Public Python behavior must be protected by unit tests and/or integration tests.
 - Prefer `unittest` for pure rule and behavior tests.
 - Use `pytest` as the standard test runner.
@@ -29,4 +37,7 @@ uv run python -m build
 - Public backend behavior requires tests.
 - Rule evaluation code should be covered with focused unit tests.
 - Integration entry points and config flows should gain integration-style tests as they evolve.
-- New backend features are not complete until the exposed behavior is covered by tests.
+- Tests should verify behavior, remain deterministic, and be easy to diagnose
+  when they fail.
+- New backend features are not complete until the exposed behavior is covered by
+  tests, all quality gates are green, and the related documentation is updated.

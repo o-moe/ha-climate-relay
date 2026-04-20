@@ -4,6 +4,65 @@
 
 This document defines the non-negotiable engineering expectations for this repository.
 
+## Delivery contract
+
+- Every increment must be developed test-first.
+- The first implementation artifact for every required behavior must be a
+  failing automated test or executable specification.
+- An increment is not complete until all behavior in scope is covered by the
+  required tests at the appropriate verification levels.
+- An increment is not final until all quality gates are green: formatting,
+  linting, automated tests, coverage, and package build.
+- An increment is not final until the relevant documentation is created or
+  updated together with the code and tests.
+- Requirement-to-test traceability must remain current for every completed
+  increment.
+
+## Cross-language code quality principles
+
+- Apply professional, language-specific best practices according to the current
+  state of the art for the language, framework, and runtime in use.
+- Apply `SOLID` and Clean Code principles across all projects, independent of
+  programming language.
+- Prefer designs with clear responsibilities, explicit boundaries, low
+  coupling, and high cohesion.
+- Keep public interfaces intentionally small, stable, and justified by concrete
+  use cases.
+- Treat readability, maintainability, diagnosability, and safe changeability as
+  first-class design goals, not optional refinements.
+- Enterprise-grade code quality is the baseline expectation for production code
+  and automated tests.
+
+## Source code standards
+
+- Production code must be structured, idiomatic, and maintainable for the
+  target language and ecosystem.
+- Favor explicit domain modeling, predictable control flow, and strong typing
+  or equivalent language-native safety mechanisms where available.
+- Avoid unnecessary complexity, hidden side effects, temporal coupling, and
+  ambiguous naming.
+- Separate domain logic from framework, transport, persistence, and UI
+  concerns.
+- Error handling, logging, and configuration boundaries must be deliberate,
+  testable, and suitable for production operation.
+- New abstractions must earn their existence through reduced complexity,
+  improved testability, or clearer boundaries.
+
+## Test standards
+
+- Automated tests must meet enterprise-grade standards for correctness,
+  maintainability, determinism, and behavioral value.
+- Tests must verify externally relevant behavior and not merely mirror the
+  implementation structure.
+- Test suites should emphasize fast, reliable unit tests for pure logic and add
+  integration tests at architectural boundaries.
+- Test names, fixtures, and assertions must communicate intent clearly and make
+  failures diagnosable.
+- Flaky tests, opaque fixtures, and incidental over-mocking are quality defects
+  and should be treated as such.
+- Where language-specific testing conventions exist, follow the strongest
+  professional convention rather than the weakest acceptable one.
+
 ## Backend quality rules
 
 - Public backend behavior must be covered by unit tests and/or integration tests.
