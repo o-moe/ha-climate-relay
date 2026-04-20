@@ -1,0 +1,13 @@
+{
+  "domain": "climate_relay_core",
+  "name": "ClimateRelayCore",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/example/climate-relay-core",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/example/climate-relay-core/issues",
+  "loggers": [],
+  "requirements": [],
+  "version": "0.1.0"
+}
