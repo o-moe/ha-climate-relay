@@ -7,7 +7,7 @@
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/example/climate-relay-core/issues",
-  "loggers": [],
+  "loggers": ["custom_components.climate_relay_core"],
   "requirements": [],
   "version": "0.1.0"
 }

@@ -5,7 +5,8 @@
 This document derives a prioritized implementation plan from the reviewed SRS in
 [requirements.md](./requirements.md), the
 [verification matrix](./verification-matrix.md), and the repository baseline in
-[README.md](../README.md), [architecture.md](./architecture.md),
+[README.md](../README.md), [developer-guide.md](./developer-guide.md),
+[architecture.md](./architecture.md),
 [discovery.md](./discovery.md), [rules.md](./rules.md),
 [engineering-standards.md](./engineering-standards.md), and
 [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -49,6 +50,8 @@ contract:
   formatting, linting, automated tests, required coverage, and package build.
 - Documentation must be created or updated within the same increment so that
   requirements, behavior, interfaces, and operating assumptions remain current.
+- User-visible changes must update the user-facing `README.md` in the same
+  increment.
 - Requirements assigned to an increment must be traceable to tests and, where
   applicable, to design-review evidence.
 
@@ -92,19 +95,24 @@ in isolation.
 
 - Scope: deliver an installable integration baseline with global configuration,
   global mode handling, Home Assistant logging, optional verbose/debug mode,
-  and one user-visible global control surface in HA.
+  a global simulation-mode option, one user-visible global control surface in
+  HA, and a repository layout that can be installed as an `Integration`-type
+  HACS custom repository.
 - User value: the product can be installed, configured, operated at global
   level, and diagnosed in a real HA instance.
 - Product-owner acceptance: the integration can be added once, exposes the
-  agreed global mode control, honors configured global defaults, and produces
-  readable logs during normal and debug operation.
+  agreed global mode control, honors configured global defaults, produces
+  readable logs during normal and debug operation, exposes the simulation-mode
+  switch with the documented default, and can be installed via HACS as a custom
+  repository.
 - Requirements: `FR-001`, `FR-002`, `FR-022` to `FR-029`, `FR-048`, `FR-049`,
-  `FR-068`, `FR-082`, `QR-011`, `QR-012`, `QR-041`, `QR-050`, `QR-060`,
-  `QR-070`, `QR-071`.
+  `FR-068`, `FR-082`, `FR-101`, `FR-102`, `QR-011`, `QR-012`, `QR-041`,
+  `QR-050`, `QR-060`, `QR-070`, `QR-071`.
 - Verification focus: `V-UT-001`, `V-UT-002`, `V-IT-001`, `V-IT-002`,
-  `V-IT-003`, `V-AT-005`, `V-DR-002`, `V-DR-004`.
+  `V-IT-003`, `V-AT-005`, `V-AT-006`, `V-DR-002`, `V-DR-004`.
 - Exit criteria: the integration delivers a manually testable HA baseline with
-  global configuration, global mode control, and operator diagnostics.
+  global configuration, global mode control, simulation-mode configuration, and
+  operator diagnostics.
 
 ### Increment 1.2: Single-room foundation with room entity and target model
 
@@ -127,19 +135,24 @@ in isolation.
 ### Increment 1.3: Single-room schedule and effective target baseline
 
 - Scope: add schedule modeling, next-change calculation, and effective target
-  resolution for one room using global mode, schedule, and fallback.
+  resolution for one room using global mode, schedule, and fallback, together
+  with simulation-mode suppression of actual device writes.
 - User value: one room now behaves automatically over time and exposes why its
-  target is currently active.
+  target is currently active, while users can verify the intended control
+  behavior safely before allowing device actuation.
 - Product-owner acceptance: the room target changes predictably according to
-  schedule and global mode, and HA shows the active control context plus next
-  change.
+  schedule and global mode, HA shows the active control context plus next
+  change, and simulation mode allows observing intended actions without sending
+  writes to real devices.
 - Requirements: `FR-015`, `FR-050` to `FR-056`, `FR-065`, `FR-086` to
-  `FR-089`, `FR-095`, `FR-096`, `QR-020`, `QR-021`, `QR-030`, `QR-051`,
-  `QR-061`.
+  `FR-089`, `FR-095`, `FR-096`, `FR-103`, `FR-104`, `QR-020`, `QR-021`,
+  `QR-030`, `QR-041`, `QR-051`, `QR-061`.
 - Verification focus: `V-UT-004`, `V-UT-006`, `V-UT-007`, `V-IT-006`,
-  `V-AT-003`, `V-AT-004`, `V-AT-005`, `V-DR-001`, `V-DR-003`.
+  `V-IT-007`, `V-AT-003`, `V-AT-004`, `V-AT-005`, `V-AT-006`, `V-DR-001`,
+  `V-DR-003`.
 - Exit criteria: one room delivers predictable scheduled behavior and
-  explanatory timing data in HA.
+  explanatory timing data in HA, and simulation mode suppresses real actuation
+  while logging intended control actions.
 
 ### Increment 1.4: Single-room manual control baseline
 
@@ -258,6 +271,13 @@ Assistant patterns.
 
 Goal: deliver the first real user-facing frontend without moving behavioral
 ownership out of the backend.
+
+Distribution rule for Epic 5:
+
+- the backend integration continues to ship from this repository as an
+  `Integration`-type HACS custom repository
+- the frontend card/strategy UI shall be packaged for HACS as a separate
+  `Dashboard`-type custom repository with its distributable `.js` assets
 
 ### Increment 5.1: Dashboard card wired to Home Assistant state
 

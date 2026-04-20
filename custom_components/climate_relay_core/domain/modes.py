@@ -21,8 +21,18 @@ class EffectivePresence(StrEnum):
     AWAY = "away"
 
 
+class UnknownStateHandling(StrEnum):
+    """How to interpret unknown or unavailable person states in auto mode."""
+
+    HOME = "home"
+    AWAY = "away"
+
+
 def resolve_presence_mode(
-    person_states: Iterable[str], global_mode: GlobalMode
+    person_states: Iterable[str],
+    global_mode: GlobalMode,
+    *,
+    unknown_state_handling: UnknownStateHandling = UnknownStateHandling.AWAY,
 ) -> EffectivePresence:
     """Resolve the effective presence state."""
     if global_mode is GlobalMode.HOME:
@@ -31,6 +41,18 @@ def resolve_presence_mode(
         return EffectivePresence.AWAY
     return (
         EffectivePresence.HOME
-        if any(state == "home" for state in person_states)
+        if any(_state_counts_as_home(state, unknown_state_handling) for state in person_states)
         else EffectivePresence.AWAY
     )
+
+
+def _state_counts_as_home(
+    state: str,
+    unknown_state_handling: UnknownStateHandling,
+) -> bool:
+    """Return whether a Home Assistant person state should count as home."""
+    if state == "home":
+        return True
+    if state in {"unknown", "unavailable"}:
+        return unknown_state_handling is UnknownStateHandling.HOME
+    return False

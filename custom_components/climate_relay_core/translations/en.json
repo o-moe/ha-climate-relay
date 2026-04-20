@@ -8,6 +8,26 @@
           "name": "Name"
         }
       }
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "Global Settings",
+          "description": "Configure the integration-wide defaults for automatic presence handling and diagnostics.",
+          "data": {
+            "person_entity_ids": "Tracked person entities",
+            "unknown_state_handling": "Unknown or unavailable person state handling",
+            "fallback_temperature": "Fallback temperature",
+            "manual_override_reset_enabled": "Enable daily override reset",
+            "manual_override_reset_time": "Daily override reset time",
+            "simulation_mode": "Simulation mode",
+            "verbose_logging": "Enable verbose diagnostic logging"
+          }
+        }
+      },
+      "error": {
+        "required": "This field is required when the daily override reset is enabled."
+      }
     }
   }
 }

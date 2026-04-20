@@ -1,0 +1,14 @@
+set_global_mode:
+  name: Set global mode
+  description: Set the integration-wide global operating mode.
+  fields:
+    mode:
+      name: Mode
+      description: The global mode to activate.
+      required: true
+      selector:
+        select:
+          options:
+            - auto
+            - home
+            - away

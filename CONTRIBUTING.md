@@ -20,6 +20,15 @@ These rules are repository-wide and intended to remain stable over time.
 - Use `ruff` for formatting and linting.
 - Use `pyproject.toml` and `uv.lock` as the source of truth for Python tooling.
 - Keep Home Assistant integration code aligned with UI-configurable integration practices.
+- Keep `README.md` user-focused and update it in every iteration that changes
+  installation, operation, supported user-facing behavior, or known
+  limitations.
+- Move developer-internal repository guidance into `docs/` or
+  developer-oriented contribution documents rather than expanding `README.md`
+  with internal workflow content.
+- Follow the repository release-channel rules in
+  `docs/release-policy.md` instead of using ad hoc tags or exposing arbitrary
+  feature branches as long-lived user-facing install targets.
 
 ## Standard commands
 
@@ -41,3 +50,5 @@ uv run python -m build
   when they fail.
 - New backend features are not complete until the exposed behavior is covered by
   tests, all quality gates are green, and the related documentation is updated.
+- User-visible backend features are not complete until the matching user-facing
+  README content is updated as well.

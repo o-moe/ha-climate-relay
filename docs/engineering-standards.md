@@ -15,6 +15,13 @@ This document defines the non-negotiable engineering expectations for this repos
   linting, automated tests, coverage, and package build.
 - An increment is not final until the relevant documentation is created or
   updated together with the code and tests.
+- An increment with any user-visible effect is not final until `README.md` is
+  updated with the current installation guidance, supported user workflow,
+  limitations, and iteration status relevant to that effect.
+- `README.md` shall remain user-focused; developer-internal workflow,
+  governance, and implementation guidance shall live outside `README.md`.
+- Release tags, GitHub releases, pre-releases, and temporary public test
+  branches shall follow the documented repository release policy.
 - Requirement-to-test traceability must remain current for every completed
   increment.
 

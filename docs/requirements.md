@@ -373,6 +373,27 @@ room state resolution:
   person states do not cause effective presence `home`.
 - Status: Confirmed direction
 
+#### FR-101 Global simulation mode option
+
+- Statement: The system shall provide a global configuration option that
+  enables or disables simulation mode for backend-controlled device actions.
+- Source: Requirements elicitation on 2026-04-20
+- Rationale: Users should be able to observe the intended control behavior
+  before allowing the integration to actuate climate devices.
+- Fit criterion: The global configuration surface exposes one simulation mode
+  option that can be turned on and off without changing the rule model itself.
+- Status: Confirmed direction
+
+#### FR-102 Simulation mode disabled by default
+
+- Statement: Simulation mode shall be disabled by default.
+- Source: Requirements elicitation on 2026-04-20
+- Rationale: A new installation should apply its configured automation behavior
+  normally unless the user explicitly opts into dry-run observation.
+- Fit criterion: A newly created integration entry does not suppress device
+  writes unless the user explicitly enables simulation mode.
+- Status: Confirmed direction
+
 ### 9.4 Window behavior
 
 #### FR-030 Delayed window activation
@@ -934,6 +955,57 @@ Examples:
   logic.
 - Status: Confirmed direction
 
+#### FR-099 Integration distribution as HACS custom repository
+
+- Statement: The Home Assistant integration shall be distributable from its
+  public GitHub repository as an `Integration`-type HACS custom repository.
+- Source: Home Assistant ecosystem distribution decision on 2026-04-20
+- Rationale: HACS custom repositories are the expected installation path for
+  community integrations and provide a user-friendly update flow.
+- Fit criterion: The integration repository contains the metadata, repository
+  structure, documentation, and validation support required for HACS to add it
+  as a custom repository of type `Integration`.
+- Status: Confirmed direction
+
+#### FR-100 Frontend distribution as separate HACS dashboard repository
+
+- Statement: The future custom frontend shall be distributable as a separate
+  public GitHub repository of type `Dashboard` in HACS and shall not be
+  coupled to installation of the backend integration package.
+- Source: Home Assistant ecosystem distribution decision on 2026-04-20
+- Rationale: HACS handles integrations and dashboard elements as different
+  repository types with different packaging rules, and users should be able to
+  install or update the UI independently from the backend.
+- Fit criterion: The frontend card or strategy is packaged in a separate
+  repository with the distributable dashboard assets expected by HACS for a
+  `Dashboard` repository.
+- Status: Confirmed direction
+
+#### FR-103 Simulation mode suppresses device writes
+
+- Statement: When simulation mode is enabled, the system shall continue rule
+  evaluation, state updates, and diagnostics processing, but it shall not send
+  active write commands to climate devices or other controlled devices.
+- Source: Requirements elicitation on 2026-04-20
+- Rationale: Dry-run operation is useful only if the full decision path still
+  executes while external side effects are suppressed.
+- Fit criterion: With simulation mode enabled, the backend still computes the
+  effective target and exposes the same explanatory state, while device-write
+  operations are skipped.
+- Status: Confirmed direction
+
+#### FR-104 Simulation mode logs intended actions
+
+- Statement: When simulation mode suppresses a device write, the system shall
+  log the intended action clearly enough for an operator to verify what would
+  have been sent.
+- Source: Requirements elicitation on 2026-04-20
+- Rationale: Simulation mode must provide observable evidence of intended
+  control behavior or it does not help users validate automation safely.
+- Fit criterion: Operator-readable logs identify suppressed actions together
+  with the intended target or command that would otherwise have been issued.
+- Status: Confirmed direction
+
 #### FR-078 Strategy shall not own business logic
 
 - Statement: A custom dashboard or view strategy shall generate configuration
@@ -1293,8 +1365,9 @@ Examples:
   without enabling excessively verbose tracing in normal operation.
 - Source: Requirements engineering refinement on 2026-04-20
 - Fit criterion: Important events such as startup recovery, fallback entry,
-  override creation or replacement, and window override activation can be found
-  in structured or consistently worded logs.
+  override creation or replacement, window override activation, and
+  simulation-mode suppressed writes can be found in structured or consistently
+  worded logs.
 - Status: Confirmed direction
 
 ### 10.6 Usability and configuration quality
@@ -1327,8 +1400,9 @@ Examples:
   of introducing a parallel proprietary control model.
 - Source: Home Assistant architecture research on 2026-04-20
 - Fit criterion: Public runtime interaction uses Home Assistant entities and
-  actions, and frontend integration uses supported custom frontend extension
-  points.
+  actions, frontend integration uses supported custom frontend extension
+  points, and distribution follows the expected HACS repository types for
+  integrations and dashboard elements.
 - Status: Confirmed direction
 
 #### QR-061 Time zone and DST correctness
@@ -1475,9 +1549,9 @@ document [verification-matrix.md](./verification-matrix.md).
   `FR-060` to `FR-062`, `QR-001` to `QR-012`, `QR-070` to `QR-072`
 - Requirements elicitation on 2026-04-20:
   `FR-017` to `FR-021`, `FR-026` to `FR-029`, `FR-037`, `FR-045` to `FR-049`,
-  `FR-053` to `FR-098`, `QR-020` to `QR-061`
+  `FR-053` to `FR-104`, `QR-020` to `QR-061`
 - Home Assistant architecture research on 2026-04-20:
-  `FR-075` to `FR-090`
+  `FR-075` to `FR-090`, `FR-099`, `FR-100`
 
 ### 14.2 Verification traceability
 

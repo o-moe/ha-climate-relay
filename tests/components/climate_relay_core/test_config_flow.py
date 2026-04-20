@@ -5,8 +5,24 @@ from __future__ import annotations
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock
 
-from custom_components.climate_relay_core.config_flow import ClimateRelayCoreConfigFlow
-from custom_components.climate_relay_core.const import DEFAULT_NAME, DOMAIN
+from custom_components.climate_relay_core.config_flow import (
+    ClimateRelayCoreConfigFlow,
+    ClimateRelayCoreOptionsFlow,
+    _normalize_reset_time,
+)
+from custom_components.climate_relay_core.const import (
+    CONF_FALLBACK_TEMPERATURE,
+    CONF_MANUAL_OVERRIDE_RESET_ENABLED,
+    CONF_MANUAL_OVERRIDE_RESET_TIME,
+    CONF_PERSON_ENTITY_IDS,
+    CONF_SIMULATION_MODE,
+    CONF_UNKNOWN_STATE_HANDLING,
+    CONF_VERBOSE_LOGGING,
+    DEFAULT_FALLBACK_TEMPERATURE,
+    DEFAULT_NAME,
+    DEFAULT_UNKNOWN_STATE_HANDLING,
+    DOMAIN,
+)
 
 
 class ConfigFlowTests(IsolatedAsyncioTestCase):
@@ -37,4 +53,98 @@ class ConfigFlowTests(IsolatedAsyncioTestCase):
         self.assertEqual(result, expected_result)
         flow.async_set_unique_id.assert_awaited_once_with(DOMAIN)
         flow._abort_if_unique_id_configured.assert_called_once_with()
-        flow.async_create_entry.assert_called_once_with(title="My Dashboard", data={})
+        flow.async_create_entry.assert_called_once_with(
+            title="My Dashboard",
+            data={
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            },
+        )
+
+
+class OptionsFlowTests(IsolatedAsyncioTestCase):
+    """Test options flow behavior."""
+
+    async def test_init_step_without_input_shows_form(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        expected_result = {"type": "form"}
+        flow.async_show_form = Mock(return_value=expected_result)
+
+        result = await flow.async_step_init()
+
+        self.assertEqual(result, expected_result)
+        flow.async_show_form.assert_called_once()
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "init")
+
+    async def test_init_step_with_input_creates_options_entry(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        expected_result = {"type": "create_entry"}
+        flow.async_create_entry = Mock(return_value=expected_result)
+
+        result = await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice", "person.bob"],
+                CONF_UNKNOWN_STATE_HANDLING: "home",
+                CONF_FALLBACK_TEMPERATURE: 18.5,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30",
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: True,
+            }
+        )
+
+        self.assertEqual(result, expected_result)
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                CONF_PERSON_ENTITY_IDS: ["person.alice", "person.bob"],
+                CONF_UNKNOWN_STATE_HANDLING: "home",
+                CONF_FALLBACK_TEMPERATURE: 18.5,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30:00",
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: True,
+            },
+        )
+
+    async def test_init_step_rejects_missing_reset_time_when_enabled(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "",
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_MANUAL_OVERRIDE_RESET_TIME: "required"},
+        )
+
+    async def test_config_flow_returns_options_flow_handler(self) -> None:
+        config_entry = Mock()
+
+        result = ClimateRelayCoreConfigFlow.async_get_options_flow(config_entry)
+
+        self.assertIsInstance(result, ClimateRelayCoreOptionsFlow)
+
+    async def test_normalize_reset_time_returns_none_when_disabled(self) -> None:
+        self.assertIsNone(_normalize_reset_time(False, "05:30"))
