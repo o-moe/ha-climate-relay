@@ -11,6 +11,7 @@ from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreConfigFlow,
     ClimateRelayCoreOptionsFlow,
     _build_options_schema,
+    _normalize_bool,
     _normalize_person_entity_ids,
     _normalize_reset_time,
 )
@@ -299,3 +300,15 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             ),
             ["person.alice", "person.bob"],
         )
+        self.assertEqual(
+            _normalize_person_entity_ids([{"value": "person.alice"}, {"value": "person.bob"}]),
+            ["person.alice", "person.bob"],
+        )
+
+    async def test_normalize_bool_supports_boolean_like_strings(self) -> None:
+        self.assertFalse(_normalize_bool(False))
+        self.assertTrue(_normalize_bool(True))
+        self.assertFalse(_normalize_bool("false"))
+        self.assertFalse(_normalize_bool("off"))
+        self.assertTrue(_normalize_bool("true"))
+        self.assertTrue(_normalize_bool("on"))

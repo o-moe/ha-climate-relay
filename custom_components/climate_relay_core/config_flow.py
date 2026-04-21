@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import time
 from typing import Any
 
@@ -22,6 +23,8 @@ from .const import (
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ClimateRelayCoreConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -66,31 +69,43 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
         defaults = {**_default_config_data(), **self._config_entry.options}
 
         if user_input is not None:
-            submitted = {**defaults, **user_input}
-            person_entity_ids = _normalize_person_entity_ids(submitted.get(CONF_PERSON_ENTITY_IDS))
-            normalized_time = _normalize_reset_time(
-                bool(submitted.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)),
-                submitted.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
-            )
-            if not person_entity_ids:
-                errors[CONF_PERSON_ENTITY_IDS] = "required"
-            if submitted[CONF_MANUAL_OVERRIDE_RESET_ENABLED] and normalized_time is None:
-                errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "required"
-            if not errors:
-                return self.async_create_entry(
-                    title="",
-                    data={
-                        CONF_PERSON_ENTITY_IDS: person_entity_ids,
-                        CONF_UNKNOWN_STATE_HANDLING: submitted[CONF_UNKNOWN_STATE_HANDLING],
-                        CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
-                        CONF_MANUAL_OVERRIDE_RESET_ENABLED: submitted[
-                            CONF_MANUAL_OVERRIDE_RESET_ENABLED
-                        ],
-                        CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
-                        CONF_SIMULATION_MODE: submitted[CONF_SIMULATION_MODE],
-                        CONF_VERBOSE_LOGGING: submitted[CONF_VERBOSE_LOGGING],
-                    },
+            try:
+                submitted = {**defaults, **user_input}
+                manual_override_reset_enabled = _normalize_bool(
+                    submitted.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)
                 )
+                simulation_mode = _normalize_bool(submitted.get(CONF_SIMULATION_MODE, False))
+                verbose_logging = _normalize_bool(submitted.get(CONF_VERBOSE_LOGGING, False))
+                person_entity_ids = _normalize_person_entity_ids(
+                    submitted.get(CONF_PERSON_ENTITY_IDS)
+                )
+                normalized_time = _normalize_reset_time(
+                    manual_override_reset_enabled,
+                    submitted.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
+                )
+                if not person_entity_ids:
+                    errors[CONF_PERSON_ENTITY_IDS] = "required"
+                if manual_override_reset_enabled and normalized_time is None:
+                    errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "required"
+                if not errors:
+                    return self.async_create_entry(
+                        title="",
+                        data={
+                            CONF_PERSON_ENTITY_IDS: person_entity_ids,
+                            CONF_UNKNOWN_STATE_HANDLING: submitted[CONF_UNKNOWN_STATE_HANDLING],
+                            CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
+                            CONF_MANUAL_OVERRIDE_RESET_ENABLED: manual_override_reset_enabled,
+                            CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
+                            CONF_SIMULATION_MODE: simulation_mode,
+                            CONF_VERBOSE_LOGGING: verbose_logging,
+                        },
+                    )
+            except Exception:
+                _LOGGER.exception(
+                    "Failed to validate global settings payload: %r",
+                    user_input,
+                )
+                errors["base"] = "unknown"
 
         schema = _build_options_schema(defaults)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
@@ -120,6 +135,19 @@ def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
     return parsed.isoformat()
 
 
+def _normalize_bool(raw_value: Any) -> bool:
+    """Normalize Home Assistant form booleans from frontend payloads."""
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"true", "on", "yes", "1"}:
+            return True
+        if normalized in {"false", "off", "no", "0", ""}:
+            return False
+    return bool(raw_value)
+
+
 def _normalize_person_entity_ids(raw_value: Any) -> list[str]:
     """Normalize selector output to a list of entity IDs."""
     if raw_value is None:
@@ -133,7 +161,7 @@ def _normalize_person_entity_ids(raw_value: Any) -> list[str]:
             normalized.append(item)
             continue
         if isinstance(item, dict):
-            entity_id = item.get("entity_id")
+            entity_id = item.get("entity_id") or item.get("value")
             if isinstance(entity_id, str):
                 normalized.append(entity_id)
                 continue
