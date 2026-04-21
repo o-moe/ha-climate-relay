@@ -16,6 +16,7 @@ from custom_components.climate_relay_core.config_flow import (
     _normalize_person_entity_ids,
     _normalize_reset_time,
     _normalize_select_value,
+    _normalize_time_field_value,
     _unwrap_selector_value,
 )
 from custom_components.climate_relay_core.const import (
@@ -118,7 +119,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertIsInstance(unknown_handling, selector.SelectSelector)
         self.assertIsInstance(fallback_temperature, selector.NumberSelector)
         self.assertIsInstance(reset_enabled, selector.BooleanSelector)
-        self.assertIsInstance(reset_time, selector.TextSelector)
+        self.assertIsInstance(reset_time, selector.TimeSelector)
         self.assertIsInstance(simulation_mode, selector.BooleanSelector)
         self.assertIsInstance(verbose_logging, selector.BooleanSelector)
 
@@ -272,7 +273,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(
             flow.async_show_form.call_args.kwargs["errors"],
-            {CONF_PERSON_ENTITY_IDS: "required"},
+            {CONF_PERSON_ENTITY_IDS: "person_entities_required"},
         )
 
     async def test_init_step_rejects_missing_reset_time_when_enabled(self) -> None:
@@ -295,8 +296,42 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(
             flow.async_show_form.call_args.kwargs["errors"],
-            {CONF_MANUAL_OVERRIDE_RESET_TIME: "required"},
+            {CONF_MANUAL_OVERRIDE_RESET_TIME: "reset_time_required"},
         )
+
+    async def test_init_step_preserves_submitted_toggle_values_when_validation_fails(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        schema = flow.async_show_form.call_args.kwargs["data_schema"]
+        defaults = {key.schema: key.default() for key in schema.schema}
+        self.assertEqual(defaults[CONF_PERSON_ENTITY_IDS], ["person.alice"])
+        self.assertEqual(
+            defaults[CONF_UNKNOWN_STATE_HANDLING],
+            DEFAULT_UNKNOWN_STATE_HANDLING,
+        )
+        self.assertEqual(
+            defaults[CONF_FALLBACK_TEMPERATURE],
+            DEFAULT_FALLBACK_TEMPERATURE,
+        )
+        self.assertTrue(defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED])
+        self.assertIsNone(defaults[CONF_MANUAL_OVERRIDE_RESET_TIME])
+        self.assertTrue(defaults[CONF_SIMULATION_MODE])
+        self.assertFalse(defaults[CONF_VERBOSE_LOGGING])
 
     async def test_init_step_surfaces_unknown_error_for_invalid_selector_payload(
         self,
@@ -410,3 +445,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertEqual(normalized[CONF_MANUAL_OVERRIDE_RESET_TIME], "06:15")
         self.assertTrue(normalized[CONF_SIMULATION_MODE])
         self.assertFalse(normalized[CONF_VERBOSE_LOGGING])
+
+    async def test_normalize_time_field_value_returns_string_or_none(self) -> None:
+        self.assertIsNone(_normalize_time_field_value(None))
+        self.assertIsNone(_normalize_time_field_value(""))
+        self.assertEqual(_normalize_time_field_value({"value": "06:15:00"}), "06:15:00")

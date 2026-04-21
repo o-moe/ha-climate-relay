@@ -66,13 +66,13 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Manage the integration options."""
         errors: dict[str, str] = {}
-        defaults = _normalize_options_values(
+        form_values = _normalize_options_values(
             {**_default_config_data(), **self._config_entry.options}
         )
 
         if user_input is not None:
             try:
-                submitted = {**defaults, **user_input}
+                submitted = {**form_values, **user_input}
                 manual_override_reset_enabled = _normalize_bool(
                     submitted.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)
                 )
@@ -88,10 +88,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     manual_override_reset_enabled,
                     submitted.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
                 )
+                form_values = _normalize_options_values(submitted)
                 if not person_entity_ids:
-                    errors[CONF_PERSON_ENTITY_IDS] = "required"
+                    errors[CONF_PERSON_ENTITY_IDS] = "person_entities_required"
                 if manual_override_reset_enabled and normalized_time is None:
-                    errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "required"
+                    errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "reset_time_required"
                 if not errors:
                     return self.async_create_entry(
                         title="",
@@ -109,11 +110,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 _LOGGER.exception(
                     "Failed to validate global settings payload: %r; defaults=%r",
                     user_input,
-                    defaults,
+                    form_values,
                 )
                 errors["base"] = "unknown"
 
-        schema = _build_options_schema(defaults)
+        schema = _build_options_schema(form_values)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 
@@ -203,12 +204,20 @@ def _normalize_options_values(values: dict[str, Any]) -> dict[str, Any]:
     normalized[CONF_MANUAL_OVERRIDE_RESET_ENABLED] = _normalize_bool(
         values.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)
     )
-    normalized[CONF_MANUAL_OVERRIDE_RESET_TIME] = _unwrap_selector_value(
+    normalized[CONF_MANUAL_OVERRIDE_RESET_TIME] = _normalize_time_field_value(
         values.get(CONF_MANUAL_OVERRIDE_RESET_TIME)
     )
     normalized[CONF_SIMULATION_MODE] = _normalize_bool(values.get(CONF_SIMULATION_MODE, False))
     normalized[CONF_VERBOSE_LOGGING] = _normalize_bool(values.get(CONF_VERBOSE_LOGGING, False))
     return normalized
+
+
+def _normalize_time_field_value(raw_value: Any) -> str | None:
+    """Normalize reset-time values for displaying them back in the form."""
+    normalized = _unwrap_selector_value(raw_value)
+    if normalized in (None, ""):
+        return None
+    return str(normalized)
 
 
 def _unwrap_selector_value(raw_value: Any) -> Any:
@@ -257,8 +266,8 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
         ): selector.BooleanSelector(),
         vol.Optional(
             CONF_MANUAL_OVERRIDE_RESET_TIME,
-            default=values[CONF_MANUAL_OVERRIDE_RESET_TIME] or "",
-        ): selector.TextSelector(),
+            default=values[CONF_MANUAL_OVERRIDE_RESET_TIME],
+        ): selector.TimeSelector(),
         vol.Required(
             CONF_SIMULATION_MODE,
             default=values[CONF_SIMULATION_MODE],

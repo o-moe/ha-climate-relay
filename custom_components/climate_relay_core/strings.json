@@ -36,7 +36,8 @@
       }
     },
     "error": {
-      "required": "This field is required when the daily override reset is enabled."
+      "person_entities_required": "Select at least one tracked presence entity.",
+      "reset_time_required": "This field is required when the daily override reset is enabled."
     }
   },
   "selector": {
