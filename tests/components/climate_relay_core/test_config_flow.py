@@ -96,11 +96,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             next(key for key in validators if key.schema == CONF_FALLBACK_TEMPERATURE)
         ]
         reset_enabled = validators[
-            next(
-                key
-                for key in validators
-                if key.schema == CONF_MANUAL_OVERRIDE_RESET_ENABLED
-            )
+            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_ENABLED)
         ]
         reset_time = validators[
             next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
