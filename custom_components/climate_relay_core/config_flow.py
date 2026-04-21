@@ -65,6 +65,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            person_entity_ids = _normalize_person_entity_ids(user_input[CONF_PERSON_ENTITY_IDS])
             normalized_time = _normalize_reset_time(
                 user_input[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
                 user_input.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
@@ -75,7 +76,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                 return self.async_create_entry(
                     title="",
                     data={
-                        CONF_PERSON_ENTITY_IDS: user_input[CONF_PERSON_ENTITY_IDS],
+                        CONF_PERSON_ENTITY_IDS: person_entity_ids,
                         CONF_UNKNOWN_STATE_HANDLING: user_input[CONF_UNKNOWN_STATE_HANDLING],
                         CONF_FALLBACK_TEMPERATURE: user_input[CONF_FALLBACK_TEMPERATURE],
                         CONF_MANUAL_OVERRIDE_RESET_ENABLED: user_input[
@@ -114,6 +115,27 @@ def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
         return None
     parsed = time.fromisoformat(value)
     return parsed.isoformat()
+
+
+def _normalize_person_entity_ids(raw_value: Any) -> list[str]:
+    """Normalize selector output to a list of entity IDs."""
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        return [raw_value]
+
+    normalized: list[str] = []
+    for item in raw_value:
+        if isinstance(item, str):
+            normalized.append(item)
+            continue
+        if isinstance(item, dict):
+            entity_id = item.get("entity_id")
+            if isinstance(entity_id, str):
+                normalized.append(entity_id)
+                continue
+        raise ValueError(f"Unsupported person entity selector value: {item!r}")
+    return normalized
 
 
 def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
