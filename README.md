@@ -3,6 +3,8 @@
 ClimateRelayCore is a Home Assistant custom integration for room-centric
 climate control.
 
+[![Open your Home Assistant instance and show the ClimateRelayCore repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?category=integration&repository=ha-climate-relay&owner=o-moe)
+
 ## Available Features
 
 - one installable integration instance per Home Assistant installation
@@ -18,6 +20,17 @@ climate control.
 The recommended installation path is through HACS as a custom repository.
 
 ### Install with HACS
+
+1. Open the badge above from the Home Assistant instance where you want to install the integration.
+2. Confirm the HACS repository link for `ClimateRelayCore`.
+3. Download `ClimateRelayCore` through HACS.
+4. Restart Home Assistant.
+5. Open `Settings > Devices & Services`.
+6. Select `Add Integration`.
+7. Search for `ClimateRelayCore`.
+8. Create the integration entry.
+
+If you prefer the manual HACS path:
 
 1. Open HACS in Home Assistant.
 2. Open the menu in the top right corner.
@@ -57,10 +70,15 @@ integration. After setup, open the integration options to configure:
 - simulation mode
 - verbose logging
 
+After a successful installation and setup, Home Assistant currently exposes:
+
+- one `select` entity named `Global Mode`
+- one service named `climate_relay_core.set_global_mode`
+
 ## How To Use It
 
-After setup, Home Assistant exposes one integration-owned `select` entity named
-`Global Mode`.
+After setup, use the `Global Mode` select entity to control the current global
+behavior.
 
 - `auto`: resolves presence from the configured `person` entities
 - `home`: forces effective presence to `home`
@@ -76,8 +94,9 @@ updates. If you enable verbose logging in the options flow, it also logs the
 resolved effective presence context.
 
 If simulation mode is enabled, the integration still evaluates its control
-logic and records the resulting decisions, but it is intended to suppress
-actual device writes once room-level actuation paths are in use.
+logic and logs the resulting decisions. In the current feature scope, there
+are no active thermostat or other device writes yet, so the option is
+primarily a preparation and observation mode for later room-level actuation.
 
 ## Current Limitations
 
