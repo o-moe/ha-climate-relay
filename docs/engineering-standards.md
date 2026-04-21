@@ -22,6 +22,9 @@ This document defines the non-negotiable engineering expectations for this repos
   governance, and implementation guidance shall live outside `README.md`.
 - Release tags, GitHub releases, pre-releases, and temporary public test
   branches shall follow the documented repository release policy.
+- The repository shall maintain explicit release metadata sufficient for
+  automated alpha and beta publication, including the manifest version and the
+  current iteration label used in release titles.
 - Requirement-to-test traceability must remain current for every completed
   increment.
 

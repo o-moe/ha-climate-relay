@@ -9,9 +9,11 @@ user-facing release channel.
 ## Distribution Channels
 
 - Stable releases are published as normal GitHub releases.
-- Early access builds are published as GitHub pre-releases.
-- Short-lived public test branches may be used for focused HACS validation when
-  a pre-release would be too broad.
+- Alpha test builds are published as GitHub pre-releases from an explicitly
+  selected branch or commit.
+- Beta test builds are published as GitHub pre-releases from `main`.
+- Short-lived public test branches may still be used for focused HACS
+  validation when a pre-release would be too broad.
 
 ## Versioning Scheme
 
@@ -29,7 +31,7 @@ Examples:
 
 - `v0.1.0-alpha.1`
 - `v0.1.0-alpha.2`
-- `v0.1.0-dev.1`
+- `v0.1.0-beta.1`
 
 ## Iteration Mapping
 
@@ -42,6 +44,9 @@ Examples:
 - Tag: `v0.1.0-alpha.1`
 - Release title: `Iteration 1.1 Alpha 1`
 
+- Tag: `v0.1.0-beta.1`
+- Release title: `Iteration 1.1 Beta 1`
+
 - Tag: `v0.1.0`
 - Release title: `Iteration 1.1`
 
@@ -49,30 +54,50 @@ Examples:
 
 - Stable user-facing installs in HACS should be backed by normal GitHub
   releases.
-- Alpha or dev testing in HACS should use GitHub pre-releases rather than
+- Alpha and beta testing in HACS should use GitHub pre-releases rather than
   ordinary releases.
 - A plain Git tag without a GitHub release is not the preferred distribution
   mechanism for HACS version selection.
 - Release notes must describe scope, known limitations, and any migration or
   upgrade expectations relevant to the published build.
+- The integration `manifest.json` version is the source of truth for the
+  release version.
+- The current iteration label used in release titles is stored in
+  `.github/release-plan.json`.
+
+## Automated Workflow
+
+- Alpha pre-releases are created manually through the GitHub Actions workflow
+  `Publish Alpha Pre-Release`.
+- The alpha workflow requires an explicit target ref and alpha sequence number.
+- Beta pre-releases are created automatically on pushes to `main` when the
+  repository still has no stable release for the current manifest version.
+- Stable releases remain deliberate manual publication steps after formal
+  acceptance.
 
 ## Branch-Based Test Builds
 
-- Do not publish every feature branch as a HACS-facing channel.
-- If branch-based HACS testing is required, use a deliberately named public
-  test branch such as `testing/iteration-1.1` or `preview/simulation-mode`.
+- Do not publish every pull request automatically as a HACS-facing release.
+- If branch-based HACS testing is required, publish a deliberate alpha
+  pre-release from the intended feature branch or use a deliberately named
+  public test branch such as `testing/iteration-1.1` or
+  `preview/simulation-mode`.
 - Public test branches should exist only as long as they are actively needed.
 - Once the test purpose is finished, remove the public test branch or stop
   documenting it as an installation target.
 
 ## Recommended Workflow
 
-1. Merge development into the intended release line.
-2. For early user testing, create a GitHub pre-release such as
-   `v0.1.0-alpha.1`.
-3. For narrow technical validation where a pre-release is too broad, expose one
+1. Set the target version in
+   `custom_components/climate_relay_core/manifest.json`.
+2. Set the current iteration label in `.github/release-plan.json`.
+3. For branch-based HA testing, run `Publish Alpha Pre-Release` for the desired
+   branch and alpha sequence number.
+4. After merge to `main`, allow the automatic beta pre-release to publish the
+   integrated test build.
+5. For narrow technical validation where a pre-release is too broad, expose one
    named public test branch temporarily.
-4. When the iteration is complete and accepted, publish the stable GitHub
+6. When the iteration is complete and accepted, publish the stable GitHub
    release such as `v0.1.0`.
 
 ## Documentation Duties

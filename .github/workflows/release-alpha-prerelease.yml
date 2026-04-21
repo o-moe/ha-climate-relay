@@ -1,0 +1,66 @@
+name: Publish Alpha Pre-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Branch or commit to publish as an alpha pre-release
+        required: true
+        type: string
+      alpha_number:
+        description: Alpha sequence number for the current version
+        required: true
+        default: "1"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-alpha:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out requested ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_ref }}
+          fetch-depth: 0
+
+      - name: Read release metadata
+        id: metadata
+        run: |
+          VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("custom_components/climate_relay_core/manifest.json").read_text())
+          print(manifest["version"])
+          PY
+          )"
+          ITERATION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["iteration"])
+          PY
+          )"
+          TAG="v${VERSION}-alpha.${{ inputs.alpha_number }}"
+          TITLE="Iteration ${ITERATION} Alpha ${{ inputs.alpha_number }}"
+          {
+            echo "version=${VERSION}"
+            echo "iteration=${ITERATION}"
+            echo "tag=${TAG}"
+            echo "title=${TITLE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create alpha pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.metadata.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ steps.metadata.outputs.title }}" \
+            --notes "Alpha pre-release for iteration ${{ steps.metadata.outputs.iteration }} from ref \`${{ inputs.target_ref }}\` at commit \`${GITHUB_SHA}\`." \
+            --prerelease

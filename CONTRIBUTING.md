@@ -29,6 +29,9 @@ These rules are repository-wide and intended to remain stable over time.
 - Follow the repository release-channel rules in
   `docs/release-policy.md` instead of using ad hoc tags or exposing arbitrary
   feature branches as long-lived user-facing install targets.
+- Before publishing alpha, beta, or stable releases, keep
+  `custom_components/climate_relay_core/manifest.json` and
+  `.github/release-plan.json` aligned with the intended version and iteration.
 
 ## Standard commands
 

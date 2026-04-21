@@ -1,0 +1,87 @@
+name: Publish Beta Pre-Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - custom_components/climate_relay_core/**
+      - README.md
+      - hacs.json
+      - .github/release-plan.json
+
+permissions:
+  contents: write
+
+jobs:
+  publish-beta:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Read release metadata
+        id: metadata
+        run: |
+          VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("custom_components/climate_relay_core/manifest.json").read_text())
+          print(manifest["version"])
+          PY
+          )"
+          ITERATION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["iteration"])
+          PY
+          )"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "iteration=${ITERATION}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if stable release already exists
+        id: stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.metadata.outputs.version }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine next beta tag
+        if: steps.stable.outputs.skip == 'false'
+        id: beta
+        run: |
+          LATEST_TAG="$(git tag -l "v${{ steps.metadata.outputs.version }}-beta.*" --sort=-version:refname | head -n 1)"
+          if [ -z "${LATEST_TAG}" ]; then
+            NEXT_NUMBER=1
+          else
+            NEXT_NUMBER="${LATEST_TAG##*.}"
+            NEXT_NUMBER="$((NEXT_NUMBER + 1))"
+          fi
+          TAG="v${{ steps.metadata.outputs.version }}-beta.${NEXT_NUMBER}"
+          TITLE="Iteration ${{ steps.metadata.outputs.iteration }} Beta ${NEXT_NUMBER}"
+          {
+            echo "number=${NEXT_NUMBER}"
+            echo "tag=${TAG}"
+            echo "title=${TITLE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create beta pre-release
+        if: steps.stable.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.beta.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ steps.beta.outputs.title }}" \
+            --notes "Beta pre-release for iteration ${{ steps.metadata.outputs.iteration }} from \`main\` at commit \`${GITHUB_SHA}\`." \
+            --prerelease

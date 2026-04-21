@@ -51,6 +51,9 @@ CI:
 - The current `frontend/` directory remains development scaffolding until that
   separate dashboard distribution exists.
 - Published versions and test channels follow [release-policy.md](./release-policy.md).
+- The release version is taken from
+  `custom_components/climate_relay_core/manifest.json`.
+- The release title iteration label is taken from `.github/release-plan.json`.
 
 ## Documentation Map
 
