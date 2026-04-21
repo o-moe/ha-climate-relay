@@ -64,6 +64,10 @@ Examples:
   release version.
 - The current iteration label used in release titles is stored in
   `.github/release-plan.json`.
+- No release or pre-release may be published until the exact target commit has
+  green GitHub quality gates.
+- Releases shall be cut from explicit, already-verified refs rather than from
+  an assumed latest local state.
 
 ## Automated Workflow
 
@@ -91,13 +95,17 @@ Examples:
 1. Set the target version in
    `custom_components/climate_relay_core/manifest.json`.
 2. Set the current iteration label in `.github/release-plan.json`.
-3. For branch-based HA testing, run `Publish Alpha Pre-Release` for the desired
-   branch and alpha sequence number.
-4. After merge to `main`, allow the automatic beta pre-release to publish the
+3. Push the intended release commit and wait for the GitHub quality gates on
+   that exact ref to complete successfully.
+4. Perform the minimum required manual HA smoke test for newly introduced or
+   changed user-visible surfaces.
+5. For branch-based HA testing, create the alpha pre-release only after steps
+   3 and 4 are satisfied.
+6. After merge to `main`, allow the automatic beta pre-release to publish the
    integrated test build.
-5. For narrow technical validation where a pre-release is too broad, expose one
+7. For narrow technical validation where a pre-release is too broad, expose one
    named public test branch temporarily.
-6. When the iteration is complete and accepted, publish the stable GitHub
+8. When the iteration is complete and accepted, publish the stable GitHub
    release such as `v0.1.0`.
 
 ## Documentation Duties

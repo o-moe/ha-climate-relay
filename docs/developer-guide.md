@@ -55,6 +55,37 @@ CI:
   `custom_components/climate_relay_core/manifest.json`.
 - The release title iteration label is taken from `.github/release-plan.json`.
 
+## Release Readiness Checklist
+
+Before cutting any alpha, beta, or stable release, verify all of the following:
+
+- the exact target commit already has green GitHub checks for formatting,
+  linting, tests, coverage, build, hassfest, and HACS validation
+- `README.md` on the release target is user-focused and matches the published
+  installation path
+- `manifest.json`, `strings.json`, and `translations/en.json` are aligned for
+  user-visible naming and config labels
+- HACS/Home Assistant brand assets render as valid images
+- the integration can be installed or upgraded in a real HA instance
+- newly introduced config or options flows can be opened, saved, and re-opened
+  without frontend errors
+
+## Iteration 1.1 Lessons
+
+The first vertical slice exposed several Home Assistant-specific failure modes
+that future increments should proactively guard against:
+
+- HACS repository pages render the published branch or release README, so user
+  documentation must be correct on the actually distributed ref, not only on a
+  feature branch.
+- Invalid or corrupt brand assets can pass unnoticed in the repo while still
+  degrading the HA/HACS UI experience.
+- Home Assistant options flows are sensitive to schema shape; generic list
+  fields and always-visible optional time selectors can break the frontend even
+  when local Python-side validation looks correct.
+- User-facing naming needs to be reviewed in the real HA UI, not only in code
+  and tests.
+
 ## Documentation Map
 
 - User entry point: [README.md](../README.md)

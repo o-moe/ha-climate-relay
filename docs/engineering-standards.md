@@ -27,6 +27,8 @@ This document defines the non-negotiable engineering expectations for this repos
   current iteration label used in release titles.
 - Requirement-to-test traceability must remain current for every completed
   increment.
+- No alpha, beta, or stable release shall be published until the corresponding
+  GitHub quality gates for the exact target commit are green.
 
 ## Cross-language code quality principles
 
@@ -80,6 +82,21 @@ This document defines the non-negotiable engineering expectations for this repos
 - `pytest` is the standard test runner for local development and CI.
 - Statement and branch coverage are mandatory for backend changes.
 - Formatting and linting are mandatory for every backend change.
+
+## Home Assistant integration rules
+
+- Home Assistant config and options flows shall use HA-native selectors for
+  user-facing inputs instead of generic Python container types.
+- Conditional user inputs shall be modeled as conditional form structure where
+  feasible, not merely as optional validators on always-visible fields.
+- User-facing entity names, states, and config labels shall be defined through
+  Home Assistant localization files rather than hardcoded UI strings.
+- Changes to `strings.json` and translated runtime strings shall be kept in sync.
+- HACS and Home Assistant brand assets must be valid image files and verified
+  locally after creation or replacement.
+- Any user-visible Home Assistant surface introduced in an increment shall
+  receive at least one manual smoke test in a running HA instance before the
+  increment is considered release-ready.
 
 ## Tooling baseline
 
