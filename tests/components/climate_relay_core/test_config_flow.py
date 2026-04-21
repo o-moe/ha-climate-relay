@@ -216,6 +216,28 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_init_step_rejects_missing_person_entities(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "",
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PERSON_ENTITY_IDS: "required"},
+        )
+
     async def test_init_step_rejects_missing_reset_time_when_enabled(self) -> None:
         config_entry = Mock()
         config_entry.options = {}
@@ -224,7 +246,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
         await flow.async_step_init(
             {
-                CONF_PERSON_ENTITY_IDS: [],
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
                 CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
                 CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
                 CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
@@ -266,6 +288,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
     async def test_normalize_person_entity_ids_supports_strings_and_selector_dicts(
         self,
     ) -> None:
+        self.assertEqual(_normalize_person_entity_ids(None), [])
         self.assertEqual(
             _normalize_person_entity_ids(["person.alice", "person.bob"]),
             ["person.alice", "person.bob"],

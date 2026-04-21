@@ -63,32 +63,35 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
     ) -> config_entries.ConfigFlowResult:
         """Manage the integration options."""
         errors: dict[str, str] = {}
+        defaults = {**_default_config_data(), **self._config_entry.options}
 
         if user_input is not None:
-            person_entity_ids = _normalize_person_entity_ids(user_input[CONF_PERSON_ENTITY_IDS])
+            submitted = {**defaults, **user_input}
+            person_entity_ids = _normalize_person_entity_ids(submitted.get(CONF_PERSON_ENTITY_IDS))
             normalized_time = _normalize_reset_time(
-                user_input[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
-                user_input.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
+                bool(submitted.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)),
+                submitted.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
             )
-            if user_input[CONF_MANUAL_OVERRIDE_RESET_ENABLED] and normalized_time is None:
+            if not person_entity_ids:
+                errors[CONF_PERSON_ENTITY_IDS] = "required"
+            if submitted[CONF_MANUAL_OVERRIDE_RESET_ENABLED] and normalized_time is None:
                 errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "required"
-            else:
+            if not errors:
                 return self.async_create_entry(
                     title="",
                     data={
                         CONF_PERSON_ENTITY_IDS: person_entity_ids,
-                        CONF_UNKNOWN_STATE_HANDLING: user_input[CONF_UNKNOWN_STATE_HANDLING],
-                        CONF_FALLBACK_TEMPERATURE: user_input[CONF_FALLBACK_TEMPERATURE],
-                        CONF_MANUAL_OVERRIDE_RESET_ENABLED: user_input[
+                        CONF_UNKNOWN_STATE_HANDLING: submitted[CONF_UNKNOWN_STATE_HANDLING],
+                        CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
+                        CONF_MANUAL_OVERRIDE_RESET_ENABLED: submitted[
                             CONF_MANUAL_OVERRIDE_RESET_ENABLED
                         ],
                         CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
-                        CONF_SIMULATION_MODE: user_input[CONF_SIMULATION_MODE],
-                        CONF_VERBOSE_LOGGING: user_input[CONF_VERBOSE_LOGGING],
+                        CONF_SIMULATION_MODE: submitted[CONF_SIMULATION_MODE],
+                        CONF_VERBOSE_LOGGING: submitted[CONF_VERBOSE_LOGGING],
                     },
                 )
 
-        defaults = {**_default_config_data(), **self._config_entry.options}
         schema = _build_options_schema(defaults)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
@@ -178,11 +181,7 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
         vol.Optional(
             CONF_MANUAL_OVERRIDE_RESET_TIME,
             default=values[CONF_MANUAL_OVERRIDE_RESET_TIME] or "",
-        ): selector.TextSelector(
-            selector.TextSelectorConfig(
-                type=selector.TextSelectorType.TIME,
-            )
-        ),
+        ): selector.TextSelector(),
         vol.Required(
             CONF_SIMULATION_MODE,
             default=values[CONF_SIMULATION_MODE],
