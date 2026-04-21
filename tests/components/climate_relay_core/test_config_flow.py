@@ -105,9 +105,6 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         reset_enabled = validators[
             next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_ENABLED)
         ]
-        reset_time = validators[
-            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
-        ]
         simulation_mode = validators[
             next(key for key in validators if key.schema == CONF_SIMULATION_MODE)
         ]
@@ -119,7 +116,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertIsInstance(unknown_handling, selector.SelectSelector)
         self.assertIsInstance(fallback_temperature, selector.NumberSelector)
         self.assertIsInstance(reset_enabled, selector.BooleanSelector)
-        self.assertIsInstance(reset_time, selector.TimeSelector)
+        self.assertFalse(any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in validators))
         self.assertIsInstance(simulation_mode, selector.BooleanSelector)
         self.assertIsInstance(verbose_logging, selector.BooleanSelector)
 
@@ -329,9 +326,37 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             DEFAULT_FALLBACK_TEMPERATURE,
         )
         self.assertTrue(defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED])
+        self.assertIn(CONF_MANUAL_OVERRIDE_RESET_TIME, defaults)
         self.assertIsNone(defaults[CONF_MANUAL_OVERRIDE_RESET_TIME])
         self.assertTrue(defaults[CONF_SIMULATION_MODE])
         self.assertFalse(defaults[CONF_VERBOSE_LOGGING])
+
+    async def test_init_step_preserves_submitted_presence_selection_when_validation_fails(
+        self,
+    ) -> None:
+        config_entry = Mock()
+        config_entry.options = {CONF_PERSON_ENTITY_IDS: ["person.alice"]}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        schema = flow.async_show_form.call_args.kwargs["data_schema"]
+        defaults = {key.schema: key.default() for key in schema.schema}
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PERSON_ENTITY_IDS: "person_entities_required"},
+        )
+        self.assertEqual(defaults[CONF_PERSON_ENTITY_IDS], [])
 
     async def test_init_step_surfaces_unknown_error_for_invalid_selector_payload(
         self,
@@ -365,7 +390,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
     async def test_normalize_reset_time_returns_none_when_disabled(self) -> None:
         self.assertIsNone(_normalize_reset_time(False, "05:30"))
 
-    async def test_build_options_schema_always_includes_reset_time_input(self) -> None:
+    async def test_build_options_schema_hides_reset_time_when_disabled(self) -> None:
         schema = _build_options_schema(
             {
                 CONF_PERSON_ENTITY_IDS: [],
@@ -377,7 +402,27 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_VERBOSE_LOGGING: False,
             }
         )
-        self.assertTrue(any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in schema.schema))
+        self.assertFalse(
+            any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in schema.schema)
+        )
+
+    async def test_build_options_schema_includes_reset_time_when_enabled(self) -> None:
+        schema = _build_options_schema(
+            {
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "06:15:00",
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+        validators = schema.schema
+        reset_time = validators[
+            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
+        ]
+        self.assertIsInstance(reset_time, selector.TimeSelector)
 
     async def test_normalize_person_entity_ids_supports_strings_and_selector_dicts(
         self,

@@ -264,10 +264,6 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
             CONF_MANUAL_OVERRIDE_RESET_ENABLED,
             default=values[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
         ): selector.BooleanSelector(),
-        vol.Optional(
-            CONF_MANUAL_OVERRIDE_RESET_TIME,
-            default=values[CONF_MANUAL_OVERRIDE_RESET_TIME],
-        ): selector.TimeSelector(),
         vol.Required(
             CONF_SIMULATION_MODE,
             default=values[CONF_SIMULATION_MODE],
@@ -277,4 +273,11 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
             default=values[CONF_VERBOSE_LOGGING],
         ): selector.BooleanSelector(),
     }
+    if values[CONF_MANUAL_OVERRIDE_RESET_ENABLED]:
+        schema_fields[
+            vol.Optional(
+                CONF_MANUAL_OVERRIDE_RESET_TIME,
+                default=values[CONF_MANUAL_OVERRIDE_RESET_TIME],
+            )
+        ] = selector.TimeSelector()
     return vol.Schema(schema_fields)
