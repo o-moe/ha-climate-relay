@@ -67,7 +67,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
         if user_input is not None:
             normalized_time = _normalize_reset_time(
                 user_input[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
-                user_input[CONF_MANUAL_OVERRIDE_RESET_TIME],
+                user_input.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
             )
             if user_input[CONF_MANUAL_OVERRIDE_RESET_ENABLED] and normalized_time is None:
                 errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "required"
@@ -124,7 +124,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                     CONF_MANUAL_OVERRIDE_RESET_ENABLED,
                     default=defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
                 ): selector.BooleanSelector(),
-                vol.Required(
+                vol.Optional(
                     CONF_MANUAL_OVERRIDE_RESET_TIME,
                     default=defaults[CONF_MANUAL_OVERRIDE_RESET_TIME] or None,
                 ): selector.TimeSelector(),

@@ -149,6 +149,38 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_init_step_allows_missing_reset_time_when_disabled(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        expected_result = {"type": "create_entry"}
+        flow.async_create_entry = Mock(return_value=expected_result)
+
+        result = await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: "away",
+                CONF_FALLBACK_TEMPERATURE: 19.0,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertEqual(result, expected_result)
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: "away",
+                CONF_FALLBACK_TEMPERATURE: 19.0,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: False,
+            },
+        )
+
     async def test_init_step_rejects_missing_reset_time_when_enabled(self) -> None:
         config_entry = Mock()
         config_entry.options = {}

@@ -71,6 +71,15 @@ integration. After setup, open the integration card menu in
 - simulation mode
 - verbose logging
 
+The options dialog includes short inline explanations. At a high level:
+
+- tracked presence entities drive `Automatic` presence resolution
+- unknown-state handling defines how missing person state is interpreted
+- fallback temperature is reserved for later room/failure handling
+- daily override reset is preparation for later room-level manual overrides
+- simulation mode keeps future actuator writes suppressed while still logging intended behavior
+- verbose logging expands diagnostic output for troubleshooting
+
 After a successful installation and setup, Home Assistant currently exposes:
 
 - one `select` entity named `Presence Control`

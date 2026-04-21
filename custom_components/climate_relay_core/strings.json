@@ -23,11 +23,28 @@
           "manual_override_reset_time": "Daily override reset time",
           "simulation_mode": "Simulation mode",
           "verbose_logging": "Enable verbose diagnostic logging"
+        },
+        "data_description": {
+          "person_entity_ids": "Used to resolve automatic home or away presence when Presence Control is set to Automatic.",
+          "unknown_state_handling": "Choose whether unknown or unavailable tracked entities should be treated as home or away.",
+          "fallback_temperature": "Fallback target temperature reserved for later failure-handling and room-control slices.",
+          "manual_override_reset_enabled": "Enable a daily reset point for manual overrides once room-level overrides are available.",
+          "manual_override_reset_time": "Only required when the daily override reset is enabled.",
+          "simulation_mode": "Evaluate control behavior and log decisions without sending future actuator writes.",
+          "verbose_logging": "Add more detailed diagnostic log output for troubleshooting."
         }
       }
     },
     "error": {
       "required": "This field is required when the daily override reset is enabled."
+    }
+  },
+  "selector": {
+    "unknown_state_handling": {
+      "options": {
+        "away": "Treat as away",
+        "home": "Treat as home"
+      }
     }
   },
   "entity": {
