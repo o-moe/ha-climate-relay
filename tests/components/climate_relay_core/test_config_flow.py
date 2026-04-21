@@ -5,6 +5,8 @@ from __future__ import annotations
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock
 
+from homeassistant.helpers import selector
+
 from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreConfigFlow,
     ClimateRelayCoreOptionsFlow,
@@ -82,6 +84,41 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertEqual(result, expected_result)
         flow.async_show_form.assert_called_once()
         self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "init")
+        schema = flow.async_show_form.call_args.kwargs["data_schema"]
+        validators = schema.schema
+        person_entities = validators[
+            next(key for key in validators if key.schema == CONF_PERSON_ENTITY_IDS)
+        ]
+        unknown_handling = validators[
+            next(key for key in validators if key.schema == CONF_UNKNOWN_STATE_HANDLING)
+        ]
+        fallback_temperature = validators[
+            next(key for key in validators if key.schema == CONF_FALLBACK_TEMPERATURE)
+        ]
+        reset_enabled = validators[
+            next(
+                key
+                for key in validators
+                if key.schema == CONF_MANUAL_OVERRIDE_RESET_ENABLED
+            )
+        ]
+        reset_time = validators[
+            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
+        ]
+        simulation_mode = validators[
+            next(key for key in validators if key.schema == CONF_SIMULATION_MODE)
+        ]
+        verbose_logging = validators[
+            next(key for key in validators if key.schema == CONF_VERBOSE_LOGGING)
+        ]
+
+        self.assertIsInstance(person_entities, selector.EntitySelector)
+        self.assertIsInstance(unknown_handling, selector.SelectSelector)
+        self.assertIsInstance(fallback_temperature, selector.NumberSelector)
+        self.assertIsInstance(reset_enabled, selector.BooleanSelector)
+        self.assertIsInstance(reset_time, selector.TimeSelector)
+        self.assertIsInstance(simulation_mode, selector.BooleanSelector)
+        self.assertIsInstance(verbose_logging, selector.BooleanSelector)
 
     async def test_init_step_with_input_creates_options_entry(self) -> None:
         config_entry = Mock()

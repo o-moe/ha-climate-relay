@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_FALLBACK_TEMPERATURE,
@@ -92,31 +93,49 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                 vol.Required(
                     CONF_PERSON_ENTITY_IDS,
                     default=defaults[CONF_PERSON_ENTITY_IDS],
-                ): [str],
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="person",
+                        multiple=True,
+                    )
+                ),
                 vol.Required(
                     CONF_UNKNOWN_STATE_HANDLING,
                     default=defaults[CONF_UNKNOWN_STATE_HANDLING],
-                ): vol.In(["away", "home"]),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["away", "home"],
+                        sort=False,
+                    )
+                ),
                 vol.Required(
                     CONF_FALLBACK_TEMPERATURE,
                     default=defaults[CONF_FALLBACK_TEMPERATURE],
-                ): vol.Coerce(float),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=5,
+                        max=35,
+                        step=0.5,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="°C",
+                    )
+                ),
                 vol.Required(
                     CONF_MANUAL_OVERRIDE_RESET_ENABLED,
                     default=defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
-                ): bool,
+                ): selector.BooleanSelector(),
                 vol.Required(
                     CONF_MANUAL_OVERRIDE_RESET_TIME,
-                    default=defaults[CONF_MANUAL_OVERRIDE_RESET_TIME] or "",
-                ): str,
+                    default=defaults[CONF_MANUAL_OVERRIDE_RESET_TIME] or None,
+                ): selector.TimeSelector(),
                 vol.Required(
                     CONF_SIMULATION_MODE,
                     default=defaults[CONF_SIMULATION_MODE],
-                ): bool,
+                ): selector.BooleanSelector(),
                 vol.Required(
                     CONF_VERBOSE_LOGGING,
                     default=defaults[CONF_VERBOSE_LOGGING],
-                ): bool,
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
