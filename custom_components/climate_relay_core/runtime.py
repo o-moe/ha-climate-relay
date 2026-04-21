@@ -125,15 +125,73 @@ def build_global_config(data: dict | None, options: dict | None) -> GlobalConfig
     """Build the effective runtime configuration from entry data and options."""
     merged = {**(data or {}), **(options or {})}
     return GlobalConfig(
-        person_entity_ids=tuple(merged.get("person_entity_ids", ())),
-        unknown_state_handling=merged.get(
-            "unknown_state_handling",
-            DEFAULT_UNKNOWN_STATE_HANDLING,
+        person_entity_ids=tuple(_normalize_person_entity_ids(merged.get("person_entity_ids"))),
+        unknown_state_handling=_normalize_unknown_state_handling(
+            merged.get("unknown_state_handling")
         ),
         fallback_temperature=float(
             merged.get("fallback_temperature", DEFAULT_FALLBACK_TEMPERATURE)
         ),
-        manual_override_reset_time=merged.get("manual_override_reset_time"),
-        simulation_mode=bool(merged.get("simulation_mode", False)),
-        verbose_logging=bool(merged.get("verbose_logging", False)),
+        manual_override_reset_time=_normalize_optional_value(
+            merged.get("manual_override_reset_time")
+        ),
+        simulation_mode=_normalize_bool(merged.get("simulation_mode", False)),
+        verbose_logging=_normalize_bool(merged.get("verbose_logging", False)),
     )
+
+
+def _normalize_bool(raw_value: object) -> bool:
+    """Normalize persisted or wrapped booleans from Home Assistant options."""
+    raw_value = _normalize_optional_value(raw_value)
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"true", "on", "yes", "1"}:
+            return True
+        if normalized in {"false", "off", "no", "0", ""}:
+            return False
+    return bool(raw_value)
+
+
+def _normalize_person_entity_ids(raw_value: object) -> list[str]:
+    """Normalize persisted person-entity selectors to plain entity IDs."""
+    raw_value = _normalize_optional_value(raw_value)
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        return [raw_value]
+    if isinstance(raw_value, dict):
+        entity_id = raw_value.get("entity_id") or raw_value.get("value")
+        if isinstance(entity_id, str):
+            return [entity_id]
+        raw_value = entity_id
+
+    normalized: list[str] = []
+    for item in raw_value:
+        item = _normalize_optional_value(item)
+        if isinstance(item, str):
+            normalized.append(item)
+            continue
+        if isinstance(item, dict):
+            entity_id = item.get("entity_id") or item.get("value")
+            if isinstance(entity_id, str):
+                normalized.append(entity_id)
+                continue
+        raise ValueError(f"Unsupported person entity selector value: {item!r}")
+    return normalized
+
+
+def _normalize_unknown_state_handling(raw_value: object) -> str:
+    """Normalize persisted unknown-state handling values."""
+    normalized = _normalize_optional_value(raw_value)
+    if isinstance(normalized, str) and normalized:
+        return normalized
+    return DEFAULT_UNKNOWN_STATE_HANDLING
+
+
+def _normalize_optional_value(raw_value: object) -> object:
+    """Unwrap common selector wrappers from persisted options."""
+    if isinstance(raw_value, dict) and "value" in raw_value:
+        return raw_value["value"]
+    return raw_value

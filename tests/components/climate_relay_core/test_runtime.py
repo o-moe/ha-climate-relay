@@ -14,6 +14,10 @@ from custom_components.climate_relay_core.domain import EffectivePresence, Globa
 from custom_components.climate_relay_core.runtime import (
     GlobalConfig,
     GlobalRuntime,
+    _normalize_bool,
+    _normalize_optional_value,
+    _normalize_person_entity_ids,
+    _normalize_unknown_state_handling,
     build_global_config,
 )
 
@@ -143,3 +147,44 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(config.fallback_temperature, 17.5)
         self.assertTrue(config.simulation_mode)
         self.assertTrue(config.verbose_logging)
+
+    async def test_build_global_config_normalizes_wrapped_option_values(self) -> None:
+        config = build_global_config(
+            {},
+            {
+                "person_entity_ids": {"value": [{"value": "person.bjoern"}]},
+                "unknown_state_handling": {"value": "home"},
+                "manual_override_reset_time": {"value": "06:15:00"},
+                "simulation_mode": {"value": "off"},
+                "verbose_logging": {"value": "on"},
+            },
+        )
+
+        self.assertEqual(config.person_entity_ids, ("person.bjoern",))
+        self.assertEqual(config.unknown_state_handling, "home")
+        self.assertEqual(config.manual_override_reset_time, "06:15:00")
+        self.assertFalse(config.simulation_mode)
+        self.assertTrue(config.verbose_logging)
+
+    async def test_runtime_normalizers_cover_scalar_and_error_paths(self) -> None:
+        self.assertFalse(_normalize_bool({"value": "off"}))
+        self.assertTrue(_normalize_bool({"value": "on"}))
+        self.assertTrue(_normalize_bool(2))
+
+        self.assertEqual(_normalize_person_entity_ids(None), [])
+        self.assertEqual(_normalize_person_entity_ids("person.alice"), ["person.alice"])
+        self.assertEqual(
+            _normalize_person_entity_ids({"entity_id": "person.alice"}),
+            ["person.alice"],
+        )
+        self.assertEqual(
+            _normalize_person_entity_ids([{"entity_id": "person.alice"}]),
+            ["person.alice"],
+        )
+        with self.assertRaisesRegex(ValueError, "Unsupported person entity selector value"):
+            _normalize_person_entity_ids([123])
+
+        self.assertEqual(_normalize_unknown_state_handling({"value": "home"}), "home")
+        self.assertEqual(_normalize_unknown_state_handling({"value": ""}), "away")
+        self.assertEqual(_normalize_optional_value({"value": "wrapped"}), "wrapped")
+        self.assertEqual(_normalize_optional_value("plain"), "plain")

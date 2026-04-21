@@ -55,7 +55,7 @@ class ClimateRelayCoreConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return ClimateRelayCoreOptionsFlow(config_entry)
 
 
-class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
+class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     """Manage iteration 1.1 global configuration."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
