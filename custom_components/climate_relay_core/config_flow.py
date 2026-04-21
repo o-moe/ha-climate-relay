@@ -66,7 +66,9 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
     ) -> config_entries.ConfigFlowResult:
         """Manage the integration options."""
         errors: dict[str, str] = {}
-        defaults = {**_default_config_data(), **self._config_entry.options}
+        defaults = _normalize_options_values(
+            {**_default_config_data(), **self._config_entry.options}
+        )
 
         if user_input is not None:
             try:
@@ -78,6 +80,9 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                 verbose_logging = _normalize_bool(submitted.get(CONF_VERBOSE_LOGGING, False))
                 person_entity_ids = _normalize_person_entity_ids(
                     submitted.get(CONF_PERSON_ENTITY_IDS)
+                )
+                unknown_state_handling = _normalize_select_value(
+                    submitted.get(CONF_UNKNOWN_STATE_HANDLING)
                 )
                 normalized_time = _normalize_reset_time(
                     manual_override_reset_enabled,
@@ -92,7 +97,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                         title="",
                         data={
                             CONF_PERSON_ENTITY_IDS: person_entity_ids,
-                            CONF_UNKNOWN_STATE_HANDLING: submitted[CONF_UNKNOWN_STATE_HANDLING],
+                            CONF_UNKNOWN_STATE_HANDLING: unknown_state_handling,
                             CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
                             CONF_MANUAL_OVERRIDE_RESET_ENABLED: manual_override_reset_enabled,
                             CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
@@ -102,8 +107,9 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                     )
             except Exception:
                 _LOGGER.exception(
-                    "Failed to validate global settings payload: %r",
+                    "Failed to validate global settings payload: %r; defaults=%r",
                     user_input,
+                    defaults,
                 )
                 errors["base"] = "unknown"
 
@@ -128,7 +134,7 @@ def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
     """Normalize the configured daily reset time."""
     if not enabled:
         return None
-    value = (raw_value or "").strip()
+    value = str(_unwrap_selector_value(raw_value) or "").strip()
     if not value:
         return None
     parsed = time.fromisoformat(value)
@@ -137,6 +143,7 @@ def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
 
 def _normalize_bool(raw_value: Any) -> bool:
     """Normalize Home Assistant form booleans from frontend payloads."""
+    raw_value = _unwrap_selector_value(raw_value)
     if isinstance(raw_value, bool):
         return raw_value
     if isinstance(raw_value, str):
@@ -150,13 +157,20 @@ def _normalize_bool(raw_value: Any) -> bool:
 
 def _normalize_person_entity_ids(raw_value: Any) -> list[str]:
     """Normalize selector output to a list of entity IDs."""
+    raw_value = _unwrap_selector_value(raw_value)
     if raw_value is None:
         return []
     if isinstance(raw_value, str):
         return [raw_value]
+    if isinstance(raw_value, dict):
+        entity_id = raw_value.get("entity_id") or raw_value.get("value")
+        if isinstance(entity_id, str):
+            return [entity_id]
+        raw_value = entity_id
 
     normalized: list[str] = []
     for item in raw_value:
+        item = _unwrap_selector_value(item)
         if isinstance(item, str):
             normalized.append(item)
             continue
@@ -167,6 +181,41 @@ def _normalize_person_entity_ids(raw_value: Any) -> list[str]:
                 continue
         raise ValueError(f"Unsupported person entity selector value: {item!r}")
     return normalized
+
+
+def _normalize_select_value(raw_value: Any) -> str:
+    """Normalize select/radio selector payloads to a plain string value."""
+    normalized = _unwrap_selector_value(raw_value)
+    if not isinstance(normalized, str):
+        raise ValueError(f"Unsupported select selector value: {raw_value!r}")
+    return normalized
+
+
+def _normalize_options_values(values: dict[str, Any]) -> dict[str, Any]:
+    """Normalize stored options before rendering them back into selectors."""
+    normalized = dict(values)
+    normalized[CONF_PERSON_ENTITY_IDS] = _normalize_person_entity_ids(
+        values.get(CONF_PERSON_ENTITY_IDS)
+    )
+    normalized[CONF_UNKNOWN_STATE_HANDLING] = _normalize_select_value(
+        values.get(CONF_UNKNOWN_STATE_HANDLING, DEFAULT_UNKNOWN_STATE_HANDLING)
+    )
+    normalized[CONF_MANUAL_OVERRIDE_RESET_ENABLED] = _normalize_bool(
+        values.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, False)
+    )
+    normalized[CONF_MANUAL_OVERRIDE_RESET_TIME] = _unwrap_selector_value(
+        values.get(CONF_MANUAL_OVERRIDE_RESET_TIME)
+    )
+    normalized[CONF_SIMULATION_MODE] = _normalize_bool(values.get(CONF_SIMULATION_MODE, False))
+    normalized[CONF_VERBOSE_LOGGING] = _normalize_bool(values.get(CONF_VERBOSE_LOGGING, False))
+    return normalized
+
+
+def _unwrap_selector_value(raw_value: Any) -> Any:
+    """Unwrap common Home Assistant selector payload wrappers."""
+    if isinstance(raw_value, dict) and "value" in raw_value:
+        return raw_value["value"]
+    return raw_value
 
 
 def _build_options_schema(values: dict[str, Any]) -> vol.Schema:

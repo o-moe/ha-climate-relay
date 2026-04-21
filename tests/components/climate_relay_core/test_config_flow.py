@@ -12,8 +12,11 @@ from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreOptionsFlow,
     _build_options_schema,
     _normalize_bool,
+    _normalize_options_values,
     _normalize_person_entity_ids,
     _normalize_reset_time,
+    _normalize_select_value,
+    _unwrap_selector_value,
 )
 from custom_components.climate_relay_core.const import (
     CONF_FALLBACK_TEMPERATURE,
@@ -185,6 +188,39 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_init_step_normalizes_wrapped_selector_values(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        expected_result = {"type": "create_entry"}
+        flow.async_create_entry = Mock(return_value=expected_result)
+
+        result = await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: {"value": [{"value": "person.alice"}]},
+                CONF_UNKNOWN_STATE_HANDLING: {"value": "home"},
+                CONF_FALLBACK_TEMPERATURE: 20.0,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: {"value": "off"},
+                CONF_MANUAL_OVERRIDE_RESET_TIME: {"value": "06:15"},
+                CONF_SIMULATION_MODE: {"value": "on"},
+                CONF_VERBOSE_LOGGING: {"value": False},
+            }
+        )
+
+        self.assertEqual(result, expected_result)
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: "home",
+                CONF_FALLBACK_TEMPERATURE: 20.0,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: True,
+                CONF_VERBOSE_LOGGING: False,
+            },
+        )
+
     async def test_init_step_allows_missing_reset_time_when_disabled(self) -> None:
         config_entry = Mock()
         config_entry.options = {}
@@ -262,6 +298,28 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             {CONF_MANUAL_OVERRIDE_RESET_TIME: "required"},
         )
 
+    async def test_init_step_surfaces_unknown_error_for_invalid_selector_payload(
+        self,
+    ) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: {"value": 123},
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "",
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertEqual(flow.async_show_form.call_args.kwargs["errors"], {"base": "unknown"})
+
     async def test_config_flow_returns_options_flow_handler(self) -> None:
         config_entry = Mock()
 
@@ -290,6 +348,11 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self,
     ) -> None:
         self.assertEqual(_normalize_person_entity_ids(None), [])
+        self.assertEqual(_normalize_person_entity_ids("person.alice"), ["person.alice"])
+        self.assertEqual(
+            _normalize_person_entity_ids({"entity_id": "person.alice"}),
+            ["person.alice"],
+        )
         self.assertEqual(
             _normalize_person_entity_ids(["person.alice", "person.bob"]),
             ["person.alice", "person.bob"],
@@ -304,6 +367,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             _normalize_person_entity_ids([{"value": "person.alice"}, {"value": "person.bob"}]),
             ["person.alice", "person.bob"],
         )
+        with self.assertRaisesRegex(ValueError, "Unsupported person entity selector value"):
+            _normalize_person_entity_ids([123])
 
     async def test_normalize_bool_supports_boolean_like_strings(self) -> None:
         self.assertFalse(_normalize_bool(False))
@@ -312,3 +377,36 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertFalse(_normalize_bool("off"))
         self.assertTrue(_normalize_bool("true"))
         self.assertTrue(_normalize_bool("on"))
+        self.assertFalse(_normalize_bool({"value": "off"}))
+        self.assertTrue(_normalize_bool({"value": "on"}))
+        self.assertTrue(_normalize_bool(2))
+
+    async def test_unwrap_selector_value_supports_value_wrapper(self) -> None:
+        self.assertEqual(_unwrap_selector_value({"value": "person.alice"}), "person.alice")
+        self.assertEqual(_unwrap_selector_value("away"), "away")
+
+    async def test_normalize_select_value_supports_value_wrapper(self) -> None:
+        self.assertEqual(_normalize_select_value({"value": "home"}), "home")
+        self.assertEqual(_normalize_select_value("away"), "away")
+        with self.assertRaisesRegex(ValueError, "Unsupported select selector value"):
+            _normalize_select_value({"value": 123})
+
+    async def test_normalize_options_values_coerces_stored_wrapped_values(self) -> None:
+        normalized = _normalize_options_values(
+            {
+                CONF_PERSON_ENTITY_IDS: {"value": [{"value": "person.alice"}]},
+                CONF_UNKNOWN_STATE_HANDLING: {"value": "home"},
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: {"value": "off"},
+                CONF_MANUAL_OVERRIDE_RESET_TIME: {"value": "06:15"},
+                CONF_SIMULATION_MODE: {"value": "on"},
+                CONF_VERBOSE_LOGGING: {"value": False},
+            }
+        )
+
+        self.assertEqual(normalized[CONF_PERSON_ENTITY_IDS], ["person.alice"])
+        self.assertEqual(normalized[CONF_UNKNOWN_STATE_HANDLING], "home")
+        self.assertFalse(normalized[CONF_MANUAL_OVERRIDE_RESET_ENABLED])
+        self.assertEqual(normalized[CONF_MANUAL_OVERRIDE_RESET_TIME], "06:15")
+        self.assertTrue(normalized[CONF_SIMULATION_MODE])
+        self.assertFalse(normalized[CONF_VERBOSE_LOGGING])
