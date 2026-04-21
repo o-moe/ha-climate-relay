@@ -1,4 +1,4 @@
-"""Select entity platform for ClimateRelayCore."""
+"""Select entity platform for Climate Relay."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from .const import (
     ATTR_SIMULATION_MODE,
     ATTR_UNKNOWN_STATE_HANDLING,
     DOMAIN,
+    ENTITY_TRANSLATION_KEY_PRESENCE_CONTROL,
 )
 from .domain import GlobalMode
 from .runtime import GlobalRuntime
@@ -37,9 +38,10 @@ class ClimateRelayCoreGlobalModeSelect(SelectEntity):
     """Global mode control surface exposed to Home Assistant."""
 
     _attr_has_entity_name = True
-    _attr_name = "Global Mode"
     _attr_options = ENTITY_OPTIONS
     _attr_should_poll = False
+    _attr_translation_key = ENTITY_TRANSLATION_KEY_PRESENCE_CONTROL
+    _attr_icon = "mdi:home-account"
 
     def __init__(self, entry_id: str, title: str, runtime: GlobalRuntime) -> None:
         self._attr_unique_id = f"{entry_id}_global_mode"

@@ -6,7 +6,11 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock
 
-from custom_components.climate_relay_core.const import ATTR_SIMULATION_MODE, DOMAIN
+from custom_components.climate_relay_core.const import (
+    ATTR_SIMULATION_MODE,
+    DOMAIN,
+    ENTITY_TRANSLATION_KEY_PRESENCE_CONTROL,
+)
 from custom_components.climate_relay_core.domain import EffectivePresence, GlobalMode
 from custom_components.climate_relay_core.select import (
     ClimateRelayCoreGlobalModeSelect,
@@ -32,6 +36,7 @@ class GlobalModeSelectTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(entity.options, ["auto", "home", "away"])
         self.assertEqual(entity.current_option, "auto")
+        self.assertEqual(entity.translation_key, ENTITY_TRANSLATION_KEY_PRESENCE_CONTROL)
         self.assertEqual(entity.extra_state_attributes["effective_presence"], "away")
         self.assertEqual(entity.extra_state_attributes[ATTR_SIMULATION_MODE], "off")
 

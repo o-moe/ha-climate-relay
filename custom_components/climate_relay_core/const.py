@@ -1,7 +1,7 @@
-"""Constants for ClimateRelayCore."""
+"""Constants for Climate Relay."""
 
 DOMAIN = "climate_relay_core"
-DEFAULT_NAME = "ClimateRelayCore"
+DEFAULT_NAME = "Climate Relay"
 
 CONF_FALLBACK_TEMPERATURE = "fallback_temperature"
 CONF_MANUAL_OVERRIDE_RESET_ENABLED = "manual_override_reset_enabled"
@@ -21,3 +21,4 @@ DEFAULT_FALLBACK_TEMPERATURE = 20.0
 DEFAULT_UNKNOWN_STATE_HANDLING = "away"
 
 SERVICE_SET_GLOBAL_MODE = "set_global_mode"
+ENTITY_TRANSLATION_KEY_PRESENCE_CONTROL = "presence_control"

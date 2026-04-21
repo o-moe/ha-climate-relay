@@ -1,10 +1,10 @@
 set_global_mode:
-  name: Set global mode
-  description: Set the integration-wide global operating mode.
+  name: Set presence control
+  description: Set the integration-wide presence control mode.
   fields:
     mode:
       name: Mode
-      description: The global mode to activate.
+      description: The presence control mode to activate.
       required: true
       selector:
         select:

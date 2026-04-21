@@ -233,13 +233,16 @@ Goal: make the backend reliable under restart and component failure.
 ### Increment 3.2: Degradation exposure and operator diagnostics
 
 - Scope: surface optional-sensor degradation and required-component fallback in
-  runtime state and logs.
+  runtime state and logs, including an explicit user-facing status or diagnosis
+  sensor if the final HA surface still needs one beyond explanatory entity
+  attributes.
 - Requirements: `FR-020`, `FR-021`, `FR-090`, `FR-097`, `FR-098`, `QR-040`,
   `QR-041`.
 - Verification focus: `V-UT-007`, `V-IT-005`, `V-AT-004`, `V-AT-005`,
   `V-DR-003`.
 - Exit criteria: degraded and fallback states are visible to both UI consumers
-  and operators, with bounded vocabulary and test evidence.
+  and operators, with bounded vocabulary, a deliberately chosen HA-facing
+  status surface, and test evidence.
 
 ## Epic 4: Home Assistant surface completion
 

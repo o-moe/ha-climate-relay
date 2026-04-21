@@ -1,6 +1,6 @@
 {
   "domain": "climate_relay_core",
-  "name": "ClimateRelayCore",
+  "name": "Climate Relay",
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/o-moe/ha-climate-relay",
