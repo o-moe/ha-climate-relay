@@ -88,8 +88,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                 )
 
         defaults = {**_default_config_data(), **self._config_entry.options}
-        current_values = {**defaults, **(user_input or {})}
-        schema = _build_options_schema(current_values)
+        schema = _build_options_schema(defaults)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 
@@ -154,24 +153,21 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
             CONF_MANUAL_OVERRIDE_RESET_ENABLED,
             default=values[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
         ): selector.BooleanSelector(),
-    }
-    if values[CONF_MANUAL_OVERRIDE_RESET_ENABLED]:
-        schema_fields[
-            vol.Required(
-                CONF_MANUAL_OVERRIDE_RESET_TIME,
-                default=values[CONF_MANUAL_OVERRIDE_RESET_TIME] or None,
+        vol.Optional(
+            CONF_MANUAL_OVERRIDE_RESET_TIME,
+            default=values[CONF_MANUAL_OVERRIDE_RESET_TIME] or "",
+        ): selector.TextSelector(
+            selector.TextSelectorConfig(
+                type=selector.TextSelectorType.TIME,
             )
-        ] = selector.TimeSelector()
-    schema_fields.update(
-        {
-            vol.Required(
-                CONF_SIMULATION_MODE,
-                default=values[CONF_SIMULATION_MODE],
-            ): selector.BooleanSelector(),
-            vol.Required(
-                CONF_VERBOSE_LOGGING,
-                default=values[CONF_VERBOSE_LOGGING],
-            ): selector.BooleanSelector(),
-        }
-    )
+        ),
+        vol.Required(
+            CONF_SIMULATION_MODE,
+            default=values[CONF_SIMULATION_MODE],
+        ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_VERBOSE_LOGGING,
+            default=values[CONF_VERBOSE_LOGGING],
+        ): selector.BooleanSelector(),
+    }
     return vol.Schema(schema_fields)
