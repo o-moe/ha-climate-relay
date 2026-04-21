@@ -88,56 +88,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlowWithReload):
                 )
 
         defaults = {**_default_config_data(), **self._config_entry.options}
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_PERSON_ENTITY_IDS,
-                    default=defaults[CONF_PERSON_ENTITY_IDS],
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="person",
-                        multiple=True,
-                    )
-                ),
-                vol.Required(
-                    CONF_UNKNOWN_STATE_HANDLING,
-                    default=defaults[CONF_UNKNOWN_STATE_HANDLING],
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=["away", "home"],
-                        sort=False,
-                    )
-                ),
-                vol.Required(
-                    CONF_FALLBACK_TEMPERATURE,
-                    default=defaults[CONF_FALLBACK_TEMPERATURE],
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=5,
-                        max=35,
-                        step=0.5,
-                        mode=selector.NumberSelectorMode.BOX,
-                        unit_of_measurement="°C",
-                    )
-                ),
-                vol.Required(
-                    CONF_MANUAL_OVERRIDE_RESET_ENABLED,
-                    default=defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
-                ): selector.BooleanSelector(),
-                vol.Optional(
-                    CONF_MANUAL_OVERRIDE_RESET_TIME,
-                    default=defaults[CONF_MANUAL_OVERRIDE_RESET_TIME] or None,
-                ): selector.TimeSelector(),
-                vol.Required(
-                    CONF_SIMULATION_MODE,
-                    default=defaults[CONF_SIMULATION_MODE],
-                ): selector.BooleanSelector(),
-                vol.Required(
-                    CONF_VERBOSE_LOGGING,
-                    default=defaults[CONF_VERBOSE_LOGGING],
-                ): selector.BooleanSelector(),
-            }
-        )
+        current_values = {**defaults, **(user_input or {})}
+        schema = _build_options_schema(current_values)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 
@@ -163,3 +115,63 @@ def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
         return None
     parsed = time.fromisoformat(value)
     return parsed.isoformat()
+
+
+def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
+    """Build the options schema for the current form state."""
+    schema_fields: dict[Any, Any] = {
+        vol.Required(
+            CONF_PERSON_ENTITY_IDS,
+            default=values[CONF_PERSON_ENTITY_IDS],
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="person",
+                multiple=True,
+            )
+        ),
+        vol.Required(
+            CONF_UNKNOWN_STATE_HANDLING,
+            default=values[CONF_UNKNOWN_STATE_HANDLING],
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=["away", "home"],
+                sort=False,
+            )
+        ),
+        vol.Required(
+            CONF_FALLBACK_TEMPERATURE,
+            default=values[CONF_FALLBACK_TEMPERATURE],
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=5,
+                max=35,
+                step=0.5,
+                mode=selector.NumberSelectorMode.BOX,
+                unit_of_measurement="°C",
+            )
+        ),
+        vol.Required(
+            CONF_MANUAL_OVERRIDE_RESET_ENABLED,
+            default=values[CONF_MANUAL_OVERRIDE_RESET_ENABLED],
+        ): selector.BooleanSelector(),
+    }
+    if values[CONF_MANUAL_OVERRIDE_RESET_ENABLED]:
+        schema_fields[
+            vol.Required(
+                CONF_MANUAL_OVERRIDE_RESET_TIME,
+                default=values[CONF_MANUAL_OVERRIDE_RESET_TIME] or None,
+            )
+        ] = selector.TimeSelector()
+    schema_fields.update(
+        {
+            vol.Required(
+                CONF_SIMULATION_MODE,
+                default=values[CONF_SIMULATION_MODE],
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_VERBOSE_LOGGING,
+                default=values[CONF_VERBOSE_LOGGING],
+            ): selector.BooleanSelector(),
+        }
+    )
+    return vol.Schema(schema_fields)

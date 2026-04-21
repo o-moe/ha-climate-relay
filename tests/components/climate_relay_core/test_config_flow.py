@@ -10,6 +10,7 @@ from homeassistant.helpers import selector
 from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreConfigFlow,
     ClimateRelayCoreOptionsFlow,
+    _build_options_schema,
     _normalize_reset_time,
 )
 from custom_components.climate_relay_core.const import (
@@ -98,9 +99,6 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         reset_enabled = validators[
             next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_ENABLED)
         ]
-        reset_time = validators[
-            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
-        ]
         simulation_mode = validators[
             next(key for key in validators if key.schema == CONF_SIMULATION_MODE)
         ]
@@ -112,7 +110,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertIsInstance(unknown_handling, selector.SelectSelector)
         self.assertIsInstance(fallback_temperature, selector.NumberSelector)
         self.assertIsInstance(reset_enabled, selector.BooleanSelector)
-        self.assertIsInstance(reset_time, selector.TimeSelector)
+        self.assertFalse(any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in validators))
         self.assertIsInstance(simulation_mode, selector.BooleanSelector)
         self.assertIsInstance(verbose_logging, selector.BooleanSelector)
 
@@ -213,3 +211,34 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
     async def test_normalize_reset_time_returns_none_when_disabled(self) -> None:
         self.assertIsNone(_normalize_reset_time(False, "05:30"))
+
+    async def test_build_options_schema_includes_reset_time_only_when_enabled(self) -> None:
+        disabled_schema = _build_options_schema(
+            {
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+        enabled_schema = _build_options_schema(
+            {
+                CONF_PERSON_ENTITY_IDS: [],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30:00",
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertFalse(
+            any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in disabled_schema.schema)
+        )
+        self.assertTrue(
+            any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in enabled_schema.schema)
+        )
