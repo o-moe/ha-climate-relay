@@ -36,14 +36,12 @@
       },
       "reset_time": {
         "title": "Daily Override Reset",
-        "description": "Choose the daily time at which manual overrides should reset. The other changes from the previous step are still pending. Turn this option off here if you want to save the other changes without configuring a daily reset.",
+        "description": "Choose the daily time at which manual overrides should reset. The other changes from the previous step are still pending. Closing this step cancels the current Global Settings changes.",
         "data": {
-          "manual_override_reset_enabled": "Keep daily override reset enabled",
           "manual_override_reset_time": "Daily override reset time"
         },
         "data_description": {
-          "manual_override_reset_enabled": "Turn this off to save the other Global Settings changes without requiring a reset time.",
-          "manual_override_reset_time": "Required only while daily override reset remains enabled."
+          "manual_override_reset_time": "Required because daily override reset is enabled."
         }
       }
     },
