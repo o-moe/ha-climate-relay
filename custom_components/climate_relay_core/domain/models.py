@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,3 +22,11 @@ class EffectiveTarget:
     hvac_mode: str | None
     preset_mode: str | None
     target_temperature: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class RoomTarget:
+    """A temperature target configured for a room."""
+
+    mode: Literal["absolute", "relative"]
+    temperature: float

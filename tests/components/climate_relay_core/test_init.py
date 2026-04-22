@@ -10,7 +10,6 @@ from homeassistant.const import Platform
 
 from custom_components.climate_relay_core import (
     PLATFORMS,
-    _async_handle_entry_update,
     _async_handle_set_global_mode,
     _async_register_services,
     async_setup,
@@ -48,7 +47,7 @@ class IntegrationSetupTests(IsolatedAsyncioTestCase):
 
         self.assertTrue(await async_setup_entry(hass, entry))
         self.assertEqual(hass.data[DOMAIN]["entry-1"]["title"], "Test Entry")
-        self.assertEqual(PLATFORMS, [Platform.SELECT])
+        self.assertEqual(PLATFORMS, [Platform.SELECT, Platform.CLIMATE])
         hass.services.async_register.assert_called_once()
         self.assertEqual(hass.services.async_register.call_args.args[1], SERVICE_SET_GLOBAL_MODE)
 
@@ -122,16 +121,17 @@ class IntegrationSetupTests(IsolatedAsyncioTestCase):
 
         self.assertIsNone(await _async_handle_set_global_mode(service_call))
 
-    async def test_entry_update_refreshes_runtime_configuration(self) -> None:
-        runtime = Mock()
+    async def test_entry_update_reloads_config_entry(self) -> None:
         hass = AsyncMock()
-        hass.data = {DOMAIN: {"entry-1": {"runtime": runtime}}}
+        hass.config_entries.async_reload = AsyncMock()
         entry = SimpleNamespace(
             entry_id="entry-1",
             data={},
             options={"fallback_temperature": 17.5},
         )
 
+        from custom_components.climate_relay_core import _async_handle_entry_update
+
         await _async_handle_entry_update(hass, entry)
 
-        runtime.update_config.assert_called_once()
+        hass.config_entries.async_reload.assert_awaited_once_with("entry-1")

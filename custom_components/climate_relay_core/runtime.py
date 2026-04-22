@@ -5,15 +5,32 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import slugify
 
 from .const import (
+    CONF_AWAY_TARGET_TEMPERATURE,
+    CONF_AWAY_TARGET_TYPE,
+    CONF_HOME_TARGET_TEMPERATURE,
+    CONF_HUMIDITY_ENTITY_ID,
+    CONF_PRIMARY_CLIMATE_ENTITY_ID,
+    CONF_ROOM_NAME,
+    CONF_ROOMS,
+    CONF_WINDOW_ENTITY_ID,
+    DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_UNKNOWN_STATE_HANDLING,
 )
-from .domain import EffectivePresence, GlobalMode, UnknownStateHandling, resolve_presence_mode
+from .domain import (
+    EffectivePresence,
+    GlobalMode,
+    RoomTarget,
+    UnknownStateHandling,
+    resolve_presence_mode,
+)
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -33,6 +50,19 @@ class GlobalConfig:
     def unknown_state_handling_enum(self) -> UnknownStateHandling:
         """Return the configured unknown-state mapping as a domain enum."""
         return UnknownStateHandling(self.unknown_state_handling)
+
+
+@dataclass(frozen=True, slots=True)
+class RoomConfig:
+    """Single-room configuration for iteration 1.2."""
+
+    room_id: str
+    name: str
+    primary_climate_entity_id: str
+    humidity_entity_id: str | None
+    window_entity_id: str | None
+    home_target: RoomTarget
+    away_target: RoomTarget
 
 
 class GlobalRuntime:
@@ -140,6 +170,35 @@ def build_global_config(data: dict | None, options: dict | None) -> GlobalConfig
     )
 
 
+def build_room_configs(data: dict | None, options: dict | None) -> tuple[RoomConfig, ...]:
+    """Build configured rooms from entry data and options."""
+    merged = {**(data or {}), **(options or {})}
+    raw_rooms = merged.get(CONF_ROOMS) or []
+    room_configs: list[RoomConfig] = []
+
+    for raw_room in raw_rooms:
+        room = _normalize_room_config(raw_room)
+        room_configs.append(
+            RoomConfig(
+                room_id=slugify(room[CONF_ROOM_NAME]),
+                name=room[CONF_ROOM_NAME],
+                primary_climate_entity_id=room[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                humidity_entity_id=room[CONF_HUMIDITY_ENTITY_ID],
+                window_entity_id=room[CONF_WINDOW_ENTITY_ID],
+                home_target=RoomTarget(
+                    mode="absolute",
+                    temperature=room[CONF_HOME_TARGET_TEMPERATURE],
+                ),
+                away_target=RoomTarget(
+                    mode=room[CONF_AWAY_TARGET_TYPE],
+                    temperature=room[CONF_AWAY_TARGET_TEMPERATURE],
+                ),
+            )
+        )
+
+    return tuple(room_configs)
+
+
 def _normalize_bool(raw_value: object) -> bool:
     """Normalize persisted or wrapped booleans from Home Assistant options."""
     raw_value = _normalize_optional_value(raw_value)
@@ -188,6 +247,57 @@ def _normalize_unknown_state_handling(raw_value: object) -> str:
     if isinstance(normalized, str) and normalized:
         return normalized
     return DEFAULT_UNKNOWN_STATE_HANDLING
+
+
+def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
+    """Normalize one persisted room configuration payload."""
+    if not isinstance(raw_value, dict):
+        raise ValueError(f"Unsupported room configuration: {raw_value!r}")
+
+    name = str(_normalize_optional_value(raw_value.get(CONF_ROOM_NAME)) or "").strip()
+    primary_climate_entity_id = _normalize_entity_id(
+        raw_value.get(CONF_PRIMARY_CLIMATE_ENTITY_ID),
+        required=True,
+    )
+
+    normalized = {
+        CONF_ROOM_NAME: name,
+        CONF_PRIMARY_CLIMATE_ENTITY_ID: primary_climate_entity_id,
+        CONF_HUMIDITY_ENTITY_ID: _normalize_entity_id(
+            raw_value.get(CONF_HUMIDITY_ENTITY_ID),
+            required=False,
+        ),
+        CONF_WINDOW_ENTITY_ID: _normalize_entity_id(
+            raw_value.get(CONF_WINDOW_ENTITY_ID),
+            required=False,
+        ),
+        CONF_HOME_TARGET_TEMPERATURE: float(raw_value.get(CONF_HOME_TARGET_TEMPERATURE)),
+        CONF_AWAY_TARGET_TYPE: _normalize_target_type(raw_value.get(CONF_AWAY_TARGET_TYPE)),
+        CONF_AWAY_TARGET_TEMPERATURE: float(raw_value.get(CONF_AWAY_TARGET_TEMPERATURE)),
+    }
+    return MappingProxyType(normalized)
+
+
+def _normalize_entity_id(raw_value: object, *, required: bool) -> str | None:
+    """Normalize entity selectors to plain entity IDs."""
+    normalized = _normalize_optional_value(raw_value)
+    if isinstance(normalized, dict):
+        normalized = normalized.get("entity_id") or normalized.get("value")
+    if normalized in (None, ""):
+        if required:
+            raise ValueError("Required entity_id is missing")
+        return None
+    if not isinstance(normalized, str):
+        raise ValueError(f"Unsupported entity selector value: {raw_value!r}")
+    return normalized
+
+
+def _normalize_target_type(raw_value: object) -> str:
+    """Normalize the away-target mode."""
+    normalized = _normalize_optional_value(raw_value)
+    if isinstance(normalized, str) and normalized in {"absolute", "relative"}:
+        return normalized
+    return DEFAULT_AWAY_TARGET_TYPE
 
 
 def _normalize_optional_value(raw_value: object) -> object:

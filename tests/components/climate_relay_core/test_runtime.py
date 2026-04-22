@@ -19,6 +19,7 @@ from custom_components.climate_relay_core.runtime import (
     _normalize_person_entity_ids,
     _normalize_unknown_state_handling,
     build_global_config,
+    build_room_configs,
 )
 
 
@@ -188,3 +189,70 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(_normalize_unknown_state_handling({"value": ""}), "away")
         self.assertEqual(_normalize_optional_value({"value": "wrapped"}), "wrapped")
         self.assertEqual(_normalize_optional_value("plain"), "plain")
+
+    async def test_build_room_configs_normalizes_single_room_payload(self) -> None:
+        (room_config,) = build_room_configs(
+            {},
+            {
+                "rooms": [
+                    {
+                        "name": "Living Room",
+                        "primary_climate_entity_id": {"value": "climate.living_room"},
+                        "humidity_entity_id": {"value": "sensor.living_room_humidity"},
+                        "window_entity_id": {"value": "binary_sensor.living_room_window"},
+                        "home_target_temperature": 21.0,
+                        "away_target_type": {"value": "relative"},
+                        "away_target_temperature": -2.0,
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(room_config.name, "Living Room")
+        self.assertEqual(room_config.room_id, "living_room")
+        self.assertEqual(room_config.primary_climate_entity_id, "climate.living_room")
+        self.assertEqual(room_config.humidity_entity_id, "sensor.living_room_humidity")
+        self.assertEqual(room_config.window_entity_id, "binary_sensor.living_room_window")
+        self.assertEqual(room_config.home_target.temperature, 21.0)
+        self.assertEqual(room_config.away_target.mode, "relative")
+
+    async def test_build_room_configs_uses_default_target_type_and_optional_entities(self) -> None:
+        (room_config,) = build_room_configs(
+            {},
+            {
+                "rooms": [
+                    {
+                        "name": "Office",
+                        "primary_climate_entity_id": "climate.office",
+                        "home_target_temperature": 20.0,
+                        "away_target_type": "unsupported",
+                        "away_target_temperature": 17.0,
+                    }
+                ]
+            },
+        )
+
+        self.assertIsNone(room_config.humidity_entity_id)
+        self.assertIsNone(room_config.window_entity_id)
+        self.assertEqual(room_config.away_target.mode, "absolute")
+
+    async def test_build_room_configs_rejects_invalid_required_entity_selector(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Required entity_id is missing"):
+            build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "name": "Office",
+                            "primary_climate_entity_id": None,
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+            )
+
+    async def test_build_room_configs_rejects_non_dict_room_payload(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported room configuration"):
+            build_room_configs({}, {"rooms": ["invalid"]})
