@@ -11,6 +11,7 @@ from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreConfigFlow,
     ClimateRelayCoreOptionsFlow,
     _build_options_schema,
+    _build_reset_time_schema,
     _normalize_bool,
     _normalize_options_values,
     _normalize_person_entity_ids,
@@ -124,8 +125,10 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
-        expected_result = {"type": "create_entry"}
-        flow.async_create_entry = Mock(return_value=expected_result)
+        expected_form_result = {"type": "form"}
+        expected_entry_result = {"type": "create_entry"}
+        flow.async_show_form = Mock(return_value=expected_form_result)
+        flow.async_create_entry = Mock(return_value=expected_entry_result)
 
         result = await flow.async_step_init(
             {
@@ -133,13 +136,17 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_UNKNOWN_STATE_HANDLING: "home",
                 CONF_FALLBACK_TEMPERATURE: 18.5,
                 CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
-                CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30",
                 CONF_SIMULATION_MODE: True,
                 CONF_VERBOSE_LOGGING: True,
             }
         )
 
-        self.assertEqual(result, expected_result)
+        self.assertEqual(result, expected_form_result)
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "reset_time")
+
+        result = await flow.async_step_reset_time({CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30"})
+
+        self.assertEqual(result, expected_entry_result)
         flow.async_create_entry.assert_called_once_with(
             title="",
             data={
@@ -285,18 +292,20 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
                 CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
                 CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
-                CONF_MANUAL_OVERRIDE_RESET_TIME: "",
                 CONF_SIMULATION_MODE: False,
                 CONF_VERBOSE_LOGGING: False,
             }
         )
+
+        flow.async_show_form.reset_mock()
+        await flow.async_step_reset_time({CONF_MANUAL_OVERRIDE_RESET_TIME: ""})
 
         self.assertEqual(
             flow.async_show_form.call_args.kwargs["errors"],
             {CONF_MANUAL_OVERRIDE_RESET_TIME: "reset_time_required"},
         )
 
-    async def test_init_step_preserves_submitted_toggle_values_when_validation_fails(self) -> None:
+    async def test_init_step_routes_enabled_reset_to_second_step(self) -> None:
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
@@ -314,22 +323,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             }
         )
 
-        schema = flow.async_show_form.call_args.kwargs["data_schema"]
-        defaults = {key.schema: key.default() for key in schema.schema}
-        self.assertEqual(defaults[CONF_PERSON_ENTITY_IDS], ["person.alice"])
-        self.assertEqual(
-            defaults[CONF_UNKNOWN_STATE_HANDLING],
-            DEFAULT_UNKNOWN_STATE_HANDLING,
-        )
-        self.assertEqual(
-            defaults[CONF_FALLBACK_TEMPERATURE],
-            DEFAULT_FALLBACK_TEMPERATURE,
-        )
-        self.assertTrue(defaults[CONF_MANUAL_OVERRIDE_RESET_ENABLED])
-        self.assertIn(CONF_MANUAL_OVERRIDE_RESET_TIME, defaults)
-        self.assertIsNone(defaults[CONF_MANUAL_OVERRIDE_RESET_TIME])
-        self.assertTrue(defaults[CONF_SIMULATION_MODE])
-        self.assertFalse(defaults[CONF_VERBOSE_LOGGING])
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "reset_time")
 
     async def test_init_step_preserves_submitted_presence_selection_when_validation_fails(
         self,
@@ -400,7 +394,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                 CONF_SIMULATION_MODE: False,
                 CONF_VERBOSE_LOGGING: False,
-            }
+            },
+            include_reset_time=False,
         )
         self.assertFalse(
             any(key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME for key in schema.schema)
@@ -416,8 +411,17 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: "06:15:00",
                 CONF_SIMULATION_MODE: False,
                 CONF_VERBOSE_LOGGING: False,
-            }
+            },
+            include_reset_time=True,
         )
+        validators = schema.schema
+        reset_time = validators[
+            next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)
+        ]
+        self.assertIsInstance(reset_time, selector.TimeSelector)
+
+    async def test_build_reset_time_schema_uses_time_selector(self) -> None:
+        schema = _build_reset_time_schema("06:15:00")
         validators = schema.schema
         reset_time = validators[
             next(key for key in validators if key.schema == CONF_MANUAL_OVERRIDE_RESET_TIME)

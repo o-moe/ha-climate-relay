@@ -60,6 +60,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
+        self._pending_options: dict[str, Any] | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -84,26 +85,29 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 unknown_state_handling = _normalize_select_value(
                     submitted.get(CONF_UNKNOWN_STATE_HANDLING)
                 )
-                normalized_time = _normalize_reset_time(
-                    manual_override_reset_enabled,
-                    submitted.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
-                )
                 form_values = _normalize_options_values(submitted)
                 if not person_entity_ids:
                     errors[CONF_PERSON_ENTITY_IDS] = "person_entities_required"
-                if manual_override_reset_enabled and normalized_time is None:
-                    errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "reset_time_required"
                 if not errors:
+                    self._pending_options = {
+                        CONF_PERSON_ENTITY_IDS: person_entity_ids,
+                        CONF_UNKNOWN_STATE_HANDLING: unknown_state_handling,
+                        CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
+                        CONF_MANUAL_OVERRIDE_RESET_ENABLED: manual_override_reset_enabled,
+                        CONF_MANUAL_OVERRIDE_RESET_TIME: form_values[
+                            CONF_MANUAL_OVERRIDE_RESET_TIME
+                        ],
+                        CONF_SIMULATION_MODE: simulation_mode,
+                        CONF_VERBOSE_LOGGING: verbose_logging,
+                    }
+                    if manual_override_reset_enabled:
+                        return await self.async_step_reset_time()
+
                     return self.async_create_entry(
                         title="",
                         data={
-                            CONF_PERSON_ENTITY_IDS: person_entity_ids,
-                            CONF_UNKNOWN_STATE_HANDLING: unknown_state_handling,
-                            CONF_FALLBACK_TEMPERATURE: submitted[CONF_FALLBACK_TEMPERATURE],
-                            CONF_MANUAL_OVERRIDE_RESET_ENABLED: manual_override_reset_enabled,
-                            CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
-                            CONF_SIMULATION_MODE: simulation_mode,
-                            CONF_VERBOSE_LOGGING: verbose_logging,
+                            **self._pending_options,
+                            CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                         },
                     )
             except Exception:
@@ -114,8 +118,48 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 )
                 errors["base"] = "unknown"
 
-        schema = _build_options_schema(form_values)
+        schema = _build_options_schema(form_values, include_reset_time=False)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+    async def async_step_reset_time(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Collect the daily reset time when the feature is enabled."""
+        errors: dict[str, str] = {}
+        pending_options = self._pending_options or _normalize_options_values(
+            {**_default_config_data(), **self._config_entry.options}
+        )
+
+        if user_input is not None:
+            try:
+                normalized_time = _normalize_reset_time(
+                    True,
+                    user_input.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
+                )
+                if normalized_time is None:
+                    errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "reset_time_required"
+                else:
+                    return self.async_create_entry(
+                        title="",
+                        data={
+                            **pending_options,
+                            CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
+                        },
+                    )
+            except Exception:
+                _LOGGER.exception(
+                    "Failed to validate reset-time payload: %r; pending_options=%r",
+                    user_input,
+                    pending_options,
+                )
+                errors["base"] = "unknown"
+
+        schema = _build_reset_time_schema(pending_options.get(CONF_MANUAL_OVERRIDE_RESET_TIME))
+        return self.async_show_form(
+            step_id="reset_time",
+            data_schema=schema,
+            errors=errors,
+        )
 
 
 def _default_config_data() -> dict[str, Any]:
@@ -227,7 +271,7 @@ def _unwrap_selector_value(raw_value: Any) -> Any:
     return raw_value
 
 
-def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
+def _build_options_schema(values: dict[str, Any], *, include_reset_time: bool) -> vol.Schema:
     """Build the options schema for the current form state."""
     schema_fields: dict[Any, Any] = {
         vol.Required(
@@ -273,7 +317,7 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
             default=values[CONF_VERBOSE_LOGGING],
         ): selector.BooleanSelector(),
     }
-    if values[CONF_MANUAL_OVERRIDE_RESET_ENABLED]:
+    if include_reset_time:
         schema_fields[
             vol.Optional(
                 CONF_MANUAL_OVERRIDE_RESET_TIME,
@@ -281,3 +325,15 @@ def _build_options_schema(values: dict[str, Any]) -> vol.Schema:
             )
         ] = selector.TimeSelector()
     return vol.Schema(schema_fields)
+
+
+def _build_reset_time_schema(value: str | None) -> vol.Schema:
+    """Build the dedicated reset-time step schema."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_MANUAL_OVERRIDE_RESET_TIME,
+                default=value,
+            ): selector.TimeSelector()
+        }
+    )

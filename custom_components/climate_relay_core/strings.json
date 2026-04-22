@@ -33,6 +33,16 @@
           "simulation_mode": "Evaluate control behavior and log decisions without sending future actuator writes.",
           "verbose_logging": "Add more detailed diagnostic log output for troubleshooting."
         }
+      },
+      "reset_time": {
+        "title": "Daily Override Reset Time",
+        "description": "Choose the daily time at which manual overrides should reset.",
+        "data": {
+          "manual_override_reset_time": "Daily override reset time"
+        },
+        "data_description": {
+          "manual_override_reset_time": "Required because daily override reset is enabled."
+        }
       }
     },
     "error": {
