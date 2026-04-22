@@ -20,6 +20,9 @@ These rules are repository-wide and intended to remain stable over time.
 - Use `ruff` for formatting and linting.
 - Use `pyproject.toml` and `uv.lock` as the source of truth for Python tooling.
 - Keep Home Assistant integration code aligned with UI-configurable integration practices.
+- For Home Assistant work, always prefer official, documented, canonical Home
+  Assistant patterns over custom or improvised solutions, especially in
+  config/options flows, selectors, entities, and other user-facing UI.
 - Keep `README.md` user-focused and update it in every iteration that changes
   installation, operation, supported user-facing behavior, or known
   limitations.
