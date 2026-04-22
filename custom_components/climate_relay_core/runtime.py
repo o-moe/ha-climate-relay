@@ -9,6 +9,15 @@ from types import MappingProxyType
 from typing import Final
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import (
+    area_registry as ar,
+)
+from homeassistant.helpers import (
+    device_registry as dr,
+)
+from homeassistant.helpers import (
+    entity_registry as er,
+)
 from homeassistant.util import slugify
 
 from .const import (
@@ -17,7 +26,6 @@ from .const import (
     CONF_HOME_TARGET_TEMPERATURE,
     CONF_HUMIDITY_ENTITY_ID,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
-    CONF_ROOM_NAME,
     CONF_ROOMS,
     CONF_WINDOW_ENTITY_ID,
     DEFAULT_AWAY_TARGET_TYPE,
@@ -53,12 +61,22 @@ class GlobalConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class RoomConfig:
-    """Single-room configuration for iteration 1.2."""
+class AreaReference:
+    """Resolved Home Assistant area context for one regulation profile."""
 
-    room_id: str
-    name: str
+    area_id: str | None
+    area_name: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class RegulationProfileConfig:
+    """Primary-climate-anchored configuration for one regulation profile."""
+
+    profile_id: str
+    display_name: str
     primary_climate_entity_id: str
+    area_id: str | None
+    area_name: str | None
     humidity_entity_id: str | None
     window_entity_id: str | None
     home_target: RoomTarget
@@ -170,19 +188,36 @@ def build_global_config(data: dict | None, options: dict | None) -> GlobalConfig
     )
 
 
-def build_room_configs(data: dict | None, options: dict | None) -> tuple[RoomConfig, ...]:
-    """Build configured rooms from entry data and options."""
+def build_room_configs(
+    data: dict | None,
+    options: dict | None,
+    *,
+    hass: HomeAssistant | None = None,
+) -> tuple[RegulationProfileConfig, ...]:
+    """Build configured regulation profiles from entry data and options."""
     merged = {**(data or {}), **(options or {})}
     raw_rooms = merged.get(CONF_ROOMS) or []
-    room_configs: list[RoomConfig] = []
+    room_configs: list[RegulationProfileConfig] = []
 
     for raw_room in raw_rooms:
         room = _normalize_room_config(raw_room)
+        primary_climate_entity_id = room[CONF_PRIMARY_CLIMATE_ENTITY_ID]
+        area_reference = (
+            _resolve_area_reference(hass, primary_climate_entity_id)
+            if hass is not None
+            else AreaReference(area_id=None, area_name=None)
+        )
         room_configs.append(
-            RoomConfig(
-                room_id=slugify(room[CONF_ROOM_NAME]),
-                name=room[CONF_ROOM_NAME],
-                primary_climate_entity_id=room[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+            RegulationProfileConfig(
+                profile_id=slugify(primary_climate_entity_id),
+                display_name=_resolve_profile_display_name(
+                    primary_climate_entity_id,
+                    area_reference,
+                    legacy_name=room.get("legacy_name"),
+                ),
+                primary_climate_entity_id=primary_climate_entity_id,
+                area_id=area_reference.area_id,
+                area_name=area_reference.area_name,
                 humidity_entity_id=room[CONF_HUMIDITY_ENTITY_ID],
                 window_entity_id=room[CONF_WINDOW_ENTITY_ID],
                 home_target=RoomTarget(
@@ -254,14 +289,13 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
     if not isinstance(raw_value, dict):
         raise ValueError(f"Unsupported room configuration: {raw_value!r}")
 
-    name = str(_normalize_optional_value(raw_value.get(CONF_ROOM_NAME)) or "").strip()
     primary_climate_entity_id = _normalize_entity_id(
         raw_value.get(CONF_PRIMARY_CLIMATE_ENTITY_ID),
         required=True,
     )
+    legacy_name = str(_normalize_optional_value(raw_value.get("name")) or "").strip() or None
 
     normalized = {
-        CONF_ROOM_NAME: name,
         CONF_PRIMARY_CLIMATE_ENTITY_ID: primary_climate_entity_id,
         CONF_HUMIDITY_ENTITY_ID: _normalize_entity_id(
             raw_value.get(CONF_HUMIDITY_ENTITY_ID),
@@ -274,6 +308,7 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
         CONF_HOME_TARGET_TEMPERATURE: float(raw_value.get(CONF_HOME_TARGET_TEMPERATURE)),
         CONF_AWAY_TARGET_TYPE: _normalize_target_type(raw_value.get(CONF_AWAY_TARGET_TYPE)),
         CONF_AWAY_TARGET_TEMPERATURE: float(raw_value.get(CONF_AWAY_TARGET_TEMPERATURE)),
+        "legacy_name": legacy_name,
     }
     return MappingProxyType(normalized)
 
@@ -305,3 +340,48 @@ def _normalize_optional_value(raw_value: object) -> object:
     if isinstance(raw_value, dict) and "value" in raw_value:
         return raw_value["value"]
     return raw_value
+
+
+def _resolve_profile_display_name(
+    primary_climate_entity_id: str,
+    area_reference: AreaReference,
+    *,
+    legacy_name: object,
+) -> str:
+    """Resolve a user-facing profile label from HA-native context."""
+    if area_reference.area_name:
+        return area_reference.area_name
+    if isinstance(legacy_name, str) and legacy_name:
+        return legacy_name
+
+    object_id = primary_climate_entity_id.partition(".")[2]
+    return object_id.replace("_", " ").title() or primary_climate_entity_id
+
+
+def _resolve_area_reference(
+    hass: HomeAssistant,
+    primary_climate_entity_id: str,
+) -> AreaReference:
+    """Resolve the Home Assistant area for a primary climate entity."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    area_registry = ar.async_get(hass)
+
+    entity_entry = entity_registry.async_get(primary_climate_entity_id)
+    if entity_entry is None:
+        return AreaReference(area_id=None, area_name=None)
+
+    area_id = entity_entry.area_id
+    if area_id is None and entity_entry.device_id is not None:
+        device_entry = device_registry.async_get(entity_entry.device_id)
+        if device_entry is not None:
+            area_id = device_entry.area_id
+
+    if area_id is None:
+        return AreaReference(area_id=None, area_name=None)
+
+    area_entry = area_registry.async_get_area(area_id)
+    return AreaReference(
+        area_id=area_id,
+        area_name=area_entry.name if area_entry is not None else None,
+    )

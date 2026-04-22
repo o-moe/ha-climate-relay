@@ -45,10 +45,9 @@
         }
       },
       "room": {
-        "title": "Room Settings",
-        "description": "Configure the first room-level control surface for Climate Relay.",
+        "title": "Regulation Profile",
+        "description": "Configure the first primary-climate-anchored control surface for Climate Relay.",
         "data": {
-          "name": "Room name",
           "primary_climate_entity_id": "Primary climate entity",
           "humidity_entity_id": "Humidity sensor",
           "window_entity_id": "Window contact",
@@ -57,10 +56,9 @@
           "away_target_temperature": "Away target value"
         },
         "data_description": {
-          "name": "User-facing room name for the integration-owned climate entity.",
-          "primary_climate_entity_id": "Required source climate entity for this room.",
+          "primary_climate_entity_id": "Required source climate entity. Its Home Assistant area is reused for Climate Relay placement.",
           "humidity_entity_id": "Optional display-only humidity source.",
-          "window_entity_id": "Optional window-contact source for later room automation slices.",
+          "window_entity_id": "Optional window-contact source for later area automation slices.",
           "home_target_temperature": "Target temperature used when the effective presence is home.",
           "away_target_type": "Choose whether the away target is absolute or relative to the home target.",
           "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type."
@@ -71,7 +69,7 @@
       "person_entities_required": "Select at least one tracked presence entity.",
       "reset_time_required": "This field is required when the daily override reset is enabled.",
       "primary_climate_required": "Select exactly one primary climate entity.",
-      "room_name_required": "Enter a room name."
+      "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first."
     }
   },
   "selector": {

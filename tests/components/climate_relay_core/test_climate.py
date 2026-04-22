@@ -1,7 +1,8 @@
-"""Tests for the room climate entity."""
+"""Tests for the regulation climate entity."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import Mock, patch
@@ -28,7 +29,7 @@ from custom_components.climate_relay_core.runtime import build_global_config, bu
 
 
 class RoomClimateEntityTests(IsolatedAsyncioTestCase):
-    """Test the room climate entity behavior."""
+    """Test the regulation climate entity behavior."""
 
     def _build_entity(
         self,
@@ -60,7 +61,6 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             {
                 CONF_ROOMS: [
                     {
-                        "name": "Living Room",
                         "primary_climate_entity_id": "climate.living_room",
                         "humidity_entity_id": "sensor.living_room_humidity",
                         "window_entity_id": "binary_sensor.living_room_window",
@@ -74,7 +74,6 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
 
         entity = ClimateRelayCoreRoomClimateEntity(
             "entry-1",
-            "Climate Relay",
             hass,
             global_runtime,
             room_config,
@@ -115,6 +114,15 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             "binary_sensor.living_room_window",
         )
 
+    async def test_entity_sets_suggested_area_on_device_info_when_available(self) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(state="heat", attributes={}),
+        )
+        entity._room_config = replace(entity._room_config, area_name="Living Room")
+        entity._attr_device_info["suggested_area"] = entity._room_config.area_name
+
+        self.assertEqual(entity.device_info["suggested_area"], "Living Room")
+
     async def test_entity_resolves_relative_away_target_from_home_target(self) -> None:
         entity = self._build_entity(
             effective_presence=EffectivePresence.AWAY,
@@ -146,6 +154,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(entity.hvac_mode, HVACMode.HEAT)
         self.assertEqual(entity.target_temperature, 16.5)
+        self.assertIsNone(entity.current_temperature)
+        self.assertEqual(entity.hvac_modes, [HVACMode.HEAT])
         self.assertEqual(entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT], "fallback")
         self.assertEqual(
             entity.extra_state_attributes[ATTR_DEGRADATION_STATUS],
@@ -164,6 +174,14 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         self.assertEqual(entity.hvac_modes, [HVACMode.HEAT])
         self.assertIsNone(entity.current_temperature)
 
+    async def test_entity_returns_none_for_non_numeric_humidity(self) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(state="heat", attributes={"current_temperature": 19.0}),
+            humidity_state=SimpleNamespace(state="not-a-number", attributes={}),
+        )
+
+        self.assertIsNone(entity.current_humidity)
+
     async def test_entity_handles_missing_optional_sources_without_extra_attributes(self) -> None:
         hass = Mock()
         hass.states.get = Mock(return_value=SimpleNamespace(state="heat", attributes={}))
@@ -176,7 +194,6 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             {
                 CONF_ROOMS: [
                     {
-                        "name": "Office",
                         "primary_climate_entity_id": "climate.office",
                         "home_target_temperature": 20.0,
                         "away_target_type": "absolute",
@@ -188,7 +205,6 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
 
         entity = ClimateRelayCoreRoomClimateEntity(
             "entry-1",
-            "Climate Relay",
             hass,
             global_runtime,
             room_config,
@@ -250,7 +266,6 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
                         {
                             CONF_ROOMS: [
                                 {
-                                    "name": "Living Room",
                                     "primary_climate_entity_id": "climate.living_room",
                                     "home_target_temperature": 21.0,
                                     "away_target_type": "absolute",

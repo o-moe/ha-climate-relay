@@ -20,7 +20,6 @@ from .const import (
     CONF_MANUAL_OVERRIDE_RESET_TIME,
     CONF_PERSON_ENTITY_IDS,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
-    CONF_ROOM_NAME,
     CONF_ROOMS,
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
@@ -32,6 +31,7 @@ from .const import (
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DOMAIN,
 )
+from .runtime import _resolve_area_reference
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +70,6 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self._pending_options: dict[str, Any] | None = None
-        self._pending_room: dict[str, Any] | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -172,7 +171,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     async def async_step_room(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Collect the single-room baseline configuration."""
+        """Collect the first regulation-profile baseline configuration."""
         errors: dict[str, str] = {}
         room_values = _normalize_room_options(
             (_normalize_rooms(self._config_entry.options) or [_default_room_data()])[0]
@@ -183,8 +182,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 submitted = _normalize_room_options({**room_values, **user_input})
                 if not submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID]:
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
-                if not submitted[CONF_ROOM_NAME]:
-                    errors[CONF_ROOM_NAME] = "room_name_required"
+                elif _resolve_area_reference(
+                    self.hass,
+                    submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                ).area_id is None:
+                    errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
 
                 if not errors:
                     return self.async_create_entry(
@@ -220,9 +222,8 @@ def _default_config_data() -> dict[str, Any]:
 
 
 def _default_room_data() -> dict[str, Any]:
-    """Return the default single-room configuration form values."""
+    """Return the default regulation-profile configuration form values."""
     return {
-        CONF_ROOM_NAME: "",
         CONF_PRIMARY_CLIMATE_ENTITY_ID: None,
         CONF_HUMIDITY_ENTITY_ID: None,
         CONF_WINDOW_ENTITY_ID: None,
@@ -314,9 +315,8 @@ def _normalize_options_values(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_room_options(values: dict[str, Any]) -> dict[str, Any]:
-    """Normalize one room configuration for rendering and persistence."""
+    """Normalize one regulation-profile configuration for rendering and persistence."""
     return {
-        CONF_ROOM_NAME: str(_unwrap_selector_value(values.get(CONF_ROOM_NAME)) or "").strip(),
         CONF_PRIMARY_CLIMATE_ENTITY_ID: _normalize_optional_entity_selector(
             values.get(CONF_PRIMARY_CLIMATE_ENTITY_ID)
         ),
@@ -339,7 +339,7 @@ def _normalize_room_options(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
-    """Normalize stored room list data."""
+    """Normalize stored regulation-profile list data."""
     raw_rooms = values.get(CONF_ROOMS) or []
     return [_normalize_room_options(room) for room in raw_rooms if isinstance(room, dict)]
 
@@ -448,10 +448,9 @@ def _build_reset_time_schema(value: str | None) -> vol.Schema:
 
 
 def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
-    """Build the room-configuration schema."""
+    """Build the regulation-profile schema."""
     return vol.Schema(
         {
-            vol.Required(CONF_ROOM_NAME, default=values[CONF_ROOM_NAME]): str,
             vol.Optional(
                 CONF_PRIMARY_CLIMATE_ENTITY_ID,
                 default=values[CONF_PRIMARY_CLIMATE_ENTITY_ID],

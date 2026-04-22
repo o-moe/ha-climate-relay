@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "title": entry.title,
         "runtime": runtime,
-        "room_configs": build_room_configs(entry.data, entry.options),
+        "room_configs": build_room_configs(entry.data, entry.options, hass=hass),
         "remove_listener": remove_listener,
     }
     _async_register_services(hass)

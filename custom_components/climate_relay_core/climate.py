@@ -1,4 +1,4 @@
-"""Climate entity platform for room-level Climate Relay entities."""
+"""Climate entity platform for Climate Relay regulation entities."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .const import (
     DOMAIN,
 )
 from .domain import resolve_room_target
-from .runtime import GlobalRuntime, RoomConfig
+from .runtime import GlobalRuntime, RegulationProfileConfig
 
 ATTR_TEMPERATURE: Final = "temperature"
 ATTR_CURRENT_TEMPERATURE: Final = "current_temperature"
@@ -35,20 +35,20 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up configured room climate entities."""
+    """Set up configured climate relay entities."""
     stored_entry = hass.data[DOMAIN][entry.entry_id]
     runtime: GlobalRuntime = stored_entry["runtime"]
-    room_configs: tuple[RoomConfig, ...] = stored_entry["room_configs"]
+    room_configs: tuple[RegulationProfileConfig, ...] = stored_entry["room_configs"]
     async_add_entities(
         [
-            ClimateRelayCoreRoomClimateEntity(entry.entry_id, entry.title, hass, runtime, room)
+            ClimateRelayCoreRoomClimateEntity(entry.entry_id, hass, runtime, room)
             for room in room_configs
         ]
     )
 
 
 class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
-    """Single-room climate surface exposed by the integration."""
+    """Primary-climate-anchored climate surface exposed by the integration."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -56,20 +56,21 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     def __init__(
         self,
         entry_id: str,
-        title: str,
         hass: HomeAssistant,
         runtime: GlobalRuntime,
-        room_config: RoomConfig,
+        room_config: RegulationProfileConfig,
     ) -> None:
         self.hass = hass
         self._runtime = runtime
         self._room_config = room_config
-        self._attr_name = room_config.name
-        self._attr_unique_id = f"{entry_id}_room_{room_config.room_id}"
+        self._attr_name = room_config.display_name
+        self._attr_unique_id = f"{entry_id}_profile_{room_config.profile_id}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": title,
+            "identifiers": {(DOMAIN, f"{entry_id}_{room_config.profile_id}")},
+            "name": room_config.display_name,
         }
+        if room_config.area_name:
+            self._attr_device_info["suggested_area"] = room_config.area_name
 
     async def async_added_to_hass(self) -> None:
         """Register for upstream runtime and state changes."""
@@ -117,7 +118,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @property
     def target_temperature(self) -> float:
-        """Return the resolved room target temperature."""
+        """Return the resolved profile target temperature."""
         if self._primary_state is None:
             return self._runtime.config.fallback_temperature
 
@@ -149,7 +150,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        """Expose sparse explanatory room context."""
+        """Expose sparse explanatory profile context."""
         attrs = {
             ATTR_ACTIVE_CONTROL_CONTEXT: self._active_control_context,
             ATTR_PRIMARY_CLIMATE_ENTITY_ID: self._room_config.primary_climate_entity_id,
