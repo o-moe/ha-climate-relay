@@ -132,17 +132,21 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
+                manual_override_reset_enabled = _normalize_bool(
+                    user_input.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, True)
+                )
                 normalized_time = _normalize_reset_time(
-                    True,
+                    manual_override_reset_enabled,
                     user_input.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
                 )
-                if normalized_time is None:
+                if manual_override_reset_enabled and normalized_time is None:
                     errors[CONF_MANUAL_OVERRIDE_RESET_TIME] = "reset_time_required"
                 else:
                     return self.async_create_entry(
                         title="",
                         data={
                             **pending_options,
+                            CONF_MANUAL_OVERRIDE_RESET_ENABLED: manual_override_reset_enabled,
                             CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
                         },
                     )
@@ -154,7 +158,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 )
                 errors["base"] = "unknown"
 
-        schema = _build_reset_time_schema(pending_options.get(CONF_MANUAL_OVERRIDE_RESET_TIME))
+        schema = _build_reset_time_schema(
+            pending_options.get(CONF_MANUAL_OVERRIDE_RESET_ENABLED, True),
+            pending_options.get(CONF_MANUAL_OVERRIDE_RESET_TIME),
+        )
         return self.async_show_form(
             step_id="reset_time",
             data_schema=schema,
@@ -327,13 +334,17 @@ def _build_options_schema(values: dict[str, Any], *, include_reset_time: bool) -
     return vol.Schema(schema_fields)
 
 
-def _build_reset_time_schema(value: str | None) -> vol.Schema:
+def _build_reset_time_schema(enabled: bool, value: str | None) -> vol.Schema:
     """Build the dedicated reset-time step schema."""
     return vol.Schema(
         {
+            vol.Required(
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED,
+                default=enabled,
+            ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_MANUAL_OVERRIDE_RESET_TIME,
                 default=value,
-            ): selector.TimeSelector()
+            ): selector.TimeSelector(),
         }
     )
