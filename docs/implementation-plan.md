@@ -6,6 +6,7 @@ This document derives a prioritized implementation plan from the reviewed SRS in
 [requirements.md](./requirements.md), the
 [verification matrix](./verification-matrix.md), and the repository baseline in
 [README.md](../README.md), [developer-guide.md](./developer-guide.md),
+[README.md](../README.md), [architecture.md](./architecture.md),
 [architecture.md](./architecture.md),
 [discovery.md](./discovery.md), [rules.md](./rules.md),
 [engineering-standards.md](./engineering-standards.md), and
@@ -281,7 +282,6 @@ Distribution rule for Epic 5:
   `Integration`-type HACS custom repository
 - the frontend card/strategy UI shall be packaged for HACS as a separate
   `Dashboard`-type custom repository with its distributable `.js` assets
-
 ### Increment 5.1: Dashboard card wired to Home Assistant state
 
 - Scope: replace the static frontend scaffold with a custom card reading real

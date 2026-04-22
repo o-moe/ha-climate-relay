@@ -47,7 +47,6 @@ If you prefer the manual HACS path:
 If both stable and early-access builds are published, ordinary users should
 prefer the latest stable GitHub release. Alpha or dev builds are intended only
 for directed testing.
-
 ### Manual Installation
 
 1. Copy `custom_components/climate_relay_core` into your Home Assistant
