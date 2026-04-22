@@ -9,6 +9,7 @@ from custom_components.climate_relay_core.domain import (
     EffectivePresence,
     EffectiveTarget,
     GlobalMode,
+    UnknownStateHandling,
     WindowActionType,
     resolve_presence_mode,
     resolve_window_action,
@@ -33,6 +34,18 @@ class ResolvePresenceModeTests(unittest.TestCase):
     def test_manual_away_override_wins(self) -> None:
         result = resolve_presence_mode(["home"], GlobalMode.AWAY)
         self.assertEqual(result, EffectivePresence.AWAY)
+
+    def test_unknown_presence_defaults_to_away(self) -> None:
+        result = resolve_presence_mode(["unknown"], GlobalMode.AUTO)
+        self.assertEqual(result, EffectivePresence.AWAY)
+
+    def test_unavailable_presence_can_be_mapped_to_home(self) -> None:
+        result = resolve_presence_mode(
+            ["unavailable"],
+            GlobalMode.AUTO,
+            unknown_state_handling=UnknownStateHandling.HOME,
+        )
+        self.assertEqual(result, EffectivePresence.HOME)
 
 
 class DomainExportsTests(unittest.TestCase):

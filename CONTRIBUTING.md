@@ -20,6 +20,24 @@ These rules are repository-wide and intended to remain stable over time.
 - Use `ruff` for formatting and linting.
 - Use `pyproject.toml` and `uv.lock` as the source of truth for Python tooling.
 - Keep Home Assistant integration code aligned with UI-configurable integration practices.
+- For Home Assistant work, always prefer official, documented, canonical Home
+  Assistant patterns over custom or improvised solutions, especially in
+  config/options flows, selectors, entities, and other user-facing UI.
+- Keep `README.md` user-focused and update it in every iteration that changes
+  installation, operation, supported user-facing behavior, or known
+  limitations.
+- Move developer-internal repository guidance into `docs/` or
+  developer-oriented contribution documents rather than expanding `README.md`
+  with internal workflow content.
+- Follow the repository release-channel rules in
+  `docs/release-policy.md` instead of using ad hoc tags or exposing arbitrary
+  feature branches as long-lived user-facing install targets.
+- Before publishing alpha, beta, or stable releases, keep
+  `custom_components/climate_relay_core/manifest.json` and
+  `.github/release-plan.json` aligned with the intended version and iteration.
+- Do not publish any release or pre-release until the exact target commit has
+  green GitHub checks and the relevant Home Assistant smoke tests have been
+  completed for newly changed user-facing surfaces.
 
 ## Standard commands
 
@@ -41,3 +59,5 @@ uv run python -m build
   when they fail.
 - New backend features are not complete until the exposed behavior is covered by
   tests, all quality gates are green, and the related documentation is updated.
+- User-visible backend features are not complete until the matching user-facing
+  README content is updated as well.

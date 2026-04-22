@@ -13,6 +13,16 @@ It complements the Software Requirements Specification in
 - change impact analysis
 - release readiness review
 
+## Current implementation evidence
+
+Iteration `1.1` currently contributes the following executable evidence:
+
+- `V-UT-001`: `tests/components/climate_relay_core/test_config_flow.py`
+- `V-UT-002`: `tests/components/climate_relay_core/test_rules.py`, `tests/components/climate_relay_core/test_runtime.py`
+- `V-IT-001`: `tests/components/climate_relay_core/test_init.py`
+- `V-IT-002`: `tests/components/climate_relay_core/test_select.py`, `tests/components/climate_relay_core/test_init.py`
+- `V-IT-003`: `tests/components/climate_relay_core/test_init.py`
+
 ## Verification method legend
 
 - `UT`: Unit test
@@ -41,6 +51,7 @@ It complements the Software Requirements Specification in
 - `V-IT-004`: Restart recovery with persisted configuration and durable control state
 - `V-IT-005`: Degraded operation and fallback exposure to Home Assistant state
 - `V-IT-006`: Frontend-facing state shape, minimal entity surface, and attribute serialization
+- `V-IT-007`: Simulation mode behavior, suppressed writes, and intended-action logging
 
 ### Acceptance tests
 
@@ -49,6 +60,7 @@ It complements the Software Requirements Specification in
 - `V-AT-003`: Specification-by-example scenarios for schedule layouts and next changes
 - `V-AT-004`: Room UI explanation scenarios for context, next change, override end, and degradation
 - `V-AT-005`: Restart and degradation user-visible behavior scenarios
+- `V-AT-006`: Simulation mode dry-run scenarios for safe behavior observation
 
 ### Design reviews
 
@@ -91,6 +103,8 @@ It complements the Software Requirements Specification in
 | `FR-027` | No intermediate effective presence state | `UT`, `AT` | `V-UT-002`, `V-AT-005` |
 | `FR-028` | Configurable handling of unknown presence states | `UT`, `IT` | `V-UT-002`, `V-IT-003` |
 | `FR-029` | Default unknown-presence mapping | `UT`, `IT` | `V-UT-002`, `V-IT-003` |
+| `FR-101` | Global simulation mode option | `IT`, `DR` | `V-IT-003`, `V-DR-003` |
+| `FR-102` | Simulation mode disabled by default | `IT`, `AT` | `V-IT-003`, `V-AT-006` |
 
 ### Window behavior
 
@@ -165,6 +179,10 @@ It complements the Software Requirements Specification in
 | `FR-075` | Home Assistant native state exposure | `IT`, `DR` | `V-IT-002`, `V-DR-002` |
 | `FR-076` | Runtime writes via integration actions | `IT`, `DR` | `V-IT-003`, `V-DR-002` |
 | `FR-077` | Custom frontend as card and optional strategy | `DR` | `V-DR-002` |
+| `FR-099` | Integration distribution as HACS custom repository | `IT`, `DR` | `V-IT-001`, `V-DR-004` |
+| `FR-100` | Frontend distribution as separate HACS dashboard repository | `DR` | `V-DR-002`, `V-DR-004` |
+| `FR-103` | Simulation mode suppresses device writes | `IT`, `AT`, `DR` | `V-IT-007`, `V-AT-006`, `V-DR-002` |
+| `FR-104` | Simulation mode logs intended actions | `IT`, `AT`, `DR` | `V-IT-007`, `V-AT-006`, `V-DR-003` |
 | `FR-078` | Strategy shall not own business logic | `DR` | `V-DR-001`, `V-DR-002` |
 | `FR-079` | Frontend reads Home Assistant state | `IT`, `DR` | `V-IT-006`, `V-DR-002` |
 | `FR-080` | Minimal externally exposed entity set | `IT`, `DR` | `V-IT-006`, `V-DR-003` |
@@ -197,10 +215,10 @@ It complements the Software Requirements Specification in
 | `QR-030` | Deterministic degraded behavior | `UT`, `IT`, `AT` | `V-UT-007`, `V-IT-005`, `V-AT-005` |
 | `QR-031` | Restart-safe recomputation | `UT`, `IT`, `AT` | `V-UT-008`, `V-IT-004`, `V-AT-005` |
 | `QR-040` | User-visible degraded-state indication | `IT`, `AT` | `V-IT-005`, `V-AT-004` |
-| `QR-041` | Operator-readable logging | `IT`, `DR` | `V-IT-005`, `V-DR-003` |
+| `QR-041` | Operator-readable logging | `IT`, `DR` | `V-IT-005`, `V-IT-007`, `V-DR-003` |
 | `QR-050` | Consistent user mental model | `DR`, `AT` | `V-DR-003`, `V-AT-004` |
 | `QR-051` | Predictable time semantics | `UT`, `AT` | `V-UT-006`, `V-AT-003` |
-| `QR-060` | Home Assistant native integration style | `DR`, `IT` | `V-DR-002`, `V-IT-002` |
+| `QR-060` | Home Assistant native integration style | `DR`, `IT` | `V-DR-002`, `V-IT-001`, `V-IT-002` |
 | `QR-061` | Time zone and DST correctness | `UT`, `IT`, `AT` | `V-UT-008`, `V-IT-004`, `V-AT-003` |
 | `QR-070` | Mandatory automated checks | `IT`, `DR` | `V-IT-001`, `V-DR-004` |
 | `QR-071` | Locked workflow consistency | `DR` | `V-DR-004` |

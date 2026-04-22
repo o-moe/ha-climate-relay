@@ -1,13 +1,13 @@
 {
   "domain": "climate_relay_core",
-  "name": "ClimateRelayCore",
+  "name": "Climate Relay",
   "codeowners": [],
   "config_flow": true,
-  "documentation": "https://github.com/example/climate-relay-core",
+  "documentation": "https://github.com/o-moe/ha-climate-relay",
   "integration_type": "service",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/example/climate-relay-core/issues",
-  "loggers": [],
+  "issue_tracker": "https://github.com/o-moe/ha-climate-relay/issues",
+  "loggers": ["custom_components.climate_relay_core"],
   "requirements": [],
   "version": "0.1.0"
 }

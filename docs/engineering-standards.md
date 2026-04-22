@@ -15,8 +15,20 @@ This document defines the non-negotiable engineering expectations for this repos
   linting, automated tests, coverage, and package build.
 - An increment is not final until the relevant documentation is created or
   updated together with the code and tests.
+- An increment with any user-visible effect is not final until `README.md` is
+  updated with the current installation guidance, supported user workflow,
+  limitations, and iteration status relevant to that effect.
+- `README.md` shall remain user-focused; developer-internal workflow,
+  governance, and implementation guidance shall live outside `README.md`.
+- Release tags, GitHub releases, pre-releases, and temporary public test
+  branches shall follow the documented repository release policy.
+- The repository shall maintain explicit release metadata sufficient for
+  automated alpha and beta publication, including the manifest version and the
+  current iteration label used in release titles.
 - Requirement-to-test traceability must remain current for every completed
   increment.
+- No alpha, beta, or stable release shall be published until the corresponding
+  GitHub quality gates for the exact target commit are green.
 
 ## Cross-language code quality principles
 
@@ -70,6 +82,36 @@ This document defines the non-negotiable engineering expectations for this repos
 - `pytest` is the standard test runner for local development and CI.
 - Statement and branch coverage are mandatory for backend changes.
 - Formatting and linting are mandatory for every backend change.
+
+## Home Assistant integration rules
+
+- For Home Assistant integrations, always prefer official, documented, canonical
+  Home Assistant implementation patterns over custom or improvised approaches.
+- This preference is mandatory and admits no exceptions unless a documented
+  Home Assistant constraint makes the canonical approach impossible.
+- In particular for user-facing UI, config flows, options flows, selectors,
+  entities, and service surfaces, implementation decisions must follow Home
+  Assistant's documented UX and data-entry-flow conventions before considering
+  any repository-local workaround or invention.
+- Home Assistant config and options flows shall use HA-native selectors for
+  user-facing inputs instead of generic Python container types.
+- Conditional user inputs shall be modeled as conditional form structure where
+  feasible, not merely as optional validators on always-visible fields.
+- User-facing entity names, states, and config labels shall be defined through
+  Home Assistant localization files rather than hardcoded UI strings.
+- Changes to `strings.json` and translated runtime strings shall be kept in sync.
+- HACS and Home Assistant brand assets must be valid image files and verified
+  locally after creation or replacement.
+- Any user-visible Home Assistant surface introduced in an increment shall
+  receive at least one manual smoke test in a running HA instance before the
+  increment is considered release-ready.
+- For this repository, the default manual Home Assistant smoke-test target is
+  the dedicated test instance at `http://haos-test.local:8123` unless a later
+  document explicitly supersedes it.
+- Home Assistant options and config flows shall be validated in the real HA UI
+  for step transitions, validation errors, cancel behavior, and state
+  persistence; Python-side tests alone are not sufficient release evidence for
+  those flows.
 
 ## Tooling baseline
 

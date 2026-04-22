@@ -1,0 +1,14 @@
+set_global_mode:
+  name: Set presence control
+  description: Set the integration-wide presence control mode.
+  fields:
+    mode:
+      name: Mode
+      description: The presence control mode to activate.
+      required: true
+      selector:
+        select:
+          options:
+            - auto
+            - home
+            - away
