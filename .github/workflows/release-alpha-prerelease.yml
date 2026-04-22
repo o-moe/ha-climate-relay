@@ -30,6 +30,7 @@ jobs:
       - name: Read release metadata
         id: metadata
         run: |
+          TARGET_SHA="$(git rev-parse HEAD)"
           VERSION="$(python - <<'PY'
           import json
           from pathlib import Path
@@ -73,6 +74,7 @@ jobs:
             echo "epic=${EPIC}"
             echo "iteration=${ITERATION}"
             echo "target_version=${TARGET_VERSION}"
+            echo "target_sha=${TARGET_SHA}"
             echo "tag=${TAG}"
             echo "title=${TITLE}"
           } >> "$GITHUB_OUTPUT"
@@ -82,7 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.metadata.outputs.tag }}" \
-            --target "${GITHUB_SHA}" \
+            --target "${{ steps.metadata.outputs.target_sha }}" \
             --title "${{ steps.metadata.outputs.title }}" \
-            --notes "Alpha pre-release for epic ${{ steps.metadata.outputs.epic }}, iteration ${{ steps.metadata.outputs.iteration }}, targeting stable version v${{ steps.metadata.outputs.version }}, from ref \`${{ inputs.target_ref }}\` at commit \`${GITHUB_SHA}\`." \
+            --notes "Alpha pre-release for epic ${{ steps.metadata.outputs.epic }}, iteration ${{ steps.metadata.outputs.iteration }}, targeting stable version v${{ steps.metadata.outputs.version }}, from ref \`${{ inputs.target_ref }}\` at commit \`${{ steps.metadata.outputs.target_sha }}\`." \
             --prerelease
