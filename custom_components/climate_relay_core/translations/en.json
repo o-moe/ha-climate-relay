@@ -14,7 +14,7 @@
     "step": {
       "init": {
         "title": "Global Settings",
-        "description": "Configure the integration-wide defaults for presence control and diagnostics.",
+        "description": "Configure the integration-wide defaults for presence control and diagnostics. If you enable a daily override reset, Home Assistant will ask for the reset time in a second step.",
         "data": {
           "person_entity_ids": "Tracked presence entities",
           "unknown_state_handling": "Unknown or unavailable presence handling",
@@ -35,13 +35,15 @@
         }
       },
       "reset_time": {
-        "title": "Daily Override Reset Time",
-        "description": "Choose the daily time at which manual overrides should reset.",
+        "title": "Daily Override Reset",
+        "description": "Choose the daily time at which manual overrides should reset. The other changes from the previous step are still pending. Turn this option off here if you want to save the other changes without configuring a daily reset.",
         "data": {
+          "manual_override_reset_enabled": "Keep daily override reset enabled",
           "manual_override_reset_time": "Daily override reset time"
         },
         "data_description": {
-          "manual_override_reset_time": "Required because daily override reset is enabled."
+          "manual_override_reset_enabled": "Turn this off to save the other Global Settings changes without requiring a reset time.",
+          "manual_override_reset_time": "Required only while daily override reset remains enabled."
         }
       }
     },
