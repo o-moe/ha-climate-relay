@@ -34,7 +34,8 @@ These rules are repository-wide and intended to remain stable over time.
   feature branches as long-lived user-facing install targets.
 - Before publishing alpha, beta, or stable releases, keep
   `custom_components/climate_relay_core/manifest.json` and
-  `.github/release-plan.json` aligned with the intended version and iteration.
+  `.github/release-plan.json` aligned with the intended epic, iteration, and
+  stable target version.
 - Do not publish any release or pre-release until the exact target commit has
   green GitHub checks and the relevant Home Assistant smoke tests have been
   completed for newly changed user-facing surfaces.

@@ -34,6 +34,14 @@ jobs:
           print(manifest["version"])
           PY
           )"
+          EPIC="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["epic"])
+          PY
+          )"
           ITERATION="$(python - <<'PY'
           import json
           from pathlib import Path
@@ -42,8 +50,22 @@ jobs:
           print(plan["iteration"])
           PY
           )"
+          TARGET_VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["target_version"])
+          PY
+          )"
+          if [ "${VERSION}" != "${TARGET_VERSION}" ]; then
+            echo "manifest version ${VERSION} does not match release plan target_version ${TARGET_VERSION}" >&2
+            exit 1
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "epic=${EPIC}" >> "$GITHUB_OUTPUT"
           echo "iteration=${ITERATION}" >> "$GITHUB_OUTPUT"
+          echo "target_version=${TARGET_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Skip if stable release already exists
         id: stable
@@ -68,7 +90,7 @@ jobs:
             NEXT_NUMBER="$((NEXT_NUMBER + 1))"
           fi
           TAG="v${{ steps.metadata.outputs.version }}-beta.${NEXT_NUMBER}"
-          TITLE="Iteration ${{ steps.metadata.outputs.iteration }} Beta ${NEXT_NUMBER}"
+          TITLE="Epic ${{ steps.metadata.outputs.epic }} / Iteration ${{ steps.metadata.outputs.iteration }} Beta ${NEXT_NUMBER}"
           {
             echo "number=${NEXT_NUMBER}"
             echo "tag=${TAG}"
@@ -83,5 +105,5 @@ jobs:
           gh release create "${{ steps.beta.outputs.tag }}" \
             --target "${GITHUB_SHA}" \
             --title "${{ steps.beta.outputs.title }}" \
-            --notes "Beta pre-release for iteration ${{ steps.metadata.outputs.iteration }} from \`main\` at commit \`${GITHUB_SHA}\`." \
+            --notes "Beta pre-release for epic ${{ steps.metadata.outputs.epic }}, iteration ${{ steps.metadata.outputs.iteration }}, targeting stable version v${{ steps.metadata.outputs.version }}, from \`main\` at commit \`${GITHUB_SHA}\`." \
             --prerelease

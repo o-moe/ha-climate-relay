@@ -24,7 +24,7 @@ This document defines the non-negotiable engineering expectations for this repos
   branches shall follow the documented repository release policy.
 - The repository shall maintain explicit release metadata sufficient for
   automated alpha and beta publication, including the manifest version and the
-  current iteration label used in release titles.
+  current epic and iteration labels used in release titles.
 - Requirement-to-test traceability must remain current for every completed
   increment.
 - No alpha, beta, or stable release shall be published until the corresponding

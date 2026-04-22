@@ -38,6 +38,14 @@ jobs:
           print(manifest["version"])
           PY
           )"
+          EPIC="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["epic"])
+          PY
+          )"
           ITERATION="$(python - <<'PY'
           import json
           from pathlib import Path
@@ -46,11 +54,25 @@ jobs:
           print(plan["iteration"])
           PY
           )"
+          TARGET_VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["target_version"])
+          PY
+          )"
+          if [ "${VERSION}" != "${TARGET_VERSION}" ]; then
+            echo "manifest version ${VERSION} does not match release plan target_version ${TARGET_VERSION}" >&2
+            exit 1
+          fi
           TAG="v${VERSION}-alpha.${{ inputs.alpha_number }}"
-          TITLE="Iteration ${ITERATION} Alpha ${{ inputs.alpha_number }}"
+          TITLE="Epic ${EPIC} / Iteration ${ITERATION} Alpha ${{ inputs.alpha_number }}"
           {
             echo "version=${VERSION}"
+            echo "epic=${EPIC}"
             echo "iteration=${ITERATION}"
+            echo "target_version=${TARGET_VERSION}"
             echo "tag=${TAG}"
             echo "title=${TITLE}"
           } >> "$GITHUB_OUTPUT"
@@ -62,5 +84,5 @@ jobs:
           gh release create "${{ steps.metadata.outputs.tag }}" \
             --target "${GITHUB_SHA}" \
             --title "${{ steps.metadata.outputs.title }}" \
-            --notes "Alpha pre-release for iteration ${{ steps.metadata.outputs.iteration }} from ref \`${{ inputs.target_ref }}\` at commit \`${GITHUB_SHA}\`." \
+            --notes "Alpha pre-release for epic ${{ steps.metadata.outputs.epic }}, iteration ${{ steps.metadata.outputs.iteration }}, targeting stable version v${{ steps.metadata.outputs.version }}, from ref \`${{ inputs.target_ref }}\` at commit \`${GITHUB_SHA}\`." \
             --prerelease
