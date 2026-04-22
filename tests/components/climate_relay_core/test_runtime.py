@@ -310,15 +310,19 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         device_registry = Mock()
         area_registry = Mock()
 
-        with patch(
-            "custom_components.climate_relay_core.runtime.er.async_get",
-            return_value=entity_registry,
-        ), patch(
-            "custom_components.climate_relay_core.runtime.dr.async_get",
-            return_value=device_registry,
-        ), patch(
-            "custom_components.climate_relay_core.runtime.ar.async_get",
-            return_value=area_registry,
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dr.async_get",
+                return_value=device_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.ar.async_get",
+                return_value=area_registry,
+            ),
         ):
             entity_registry.async_get.return_value = SimpleNamespace(
                 area_id="entity_area",
@@ -355,10 +359,10 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
     async def test_build_room_configs_rejects_invalid_required_entity_selector(self) -> None:
         with self.assertRaisesRegex(ValueError, "Required entity_id is missing"):
             build_room_configs(
-            {},
-            {
-                "rooms": [
-                    {
+                {},
+                {
+                    "rooms": [
+                        {
                             "primary_climate_entity_id": None,
                             "home_target_temperature": 20.0,
                             "away_target_type": "absolute",

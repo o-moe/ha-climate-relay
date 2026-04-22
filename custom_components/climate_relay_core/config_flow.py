@@ -182,10 +182,13 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 submitted = _normalize_room_options({**room_values, **user_input})
                 if not submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID]:
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
-                elif _resolve_area_reference(
-                    self.hass,
-                    submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID],
-                ).area_id is None:
+                elif (
+                    _resolve_area_reference(
+                        self.hass,
+                        submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                    ).area_id
+                    is None
+                ):
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
 
                 if not errors:

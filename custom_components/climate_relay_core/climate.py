@@ -145,7 +145,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             return None
         try:
             return float(humidity_state.state)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     @property
