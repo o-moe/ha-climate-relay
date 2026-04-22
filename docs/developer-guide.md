@@ -23,6 +23,16 @@ uv run pytest
 uv run python -m build
 ```
 
+## Home Assistant Test Instance
+
+- The default manual smoke-test target for this repository is
+  `http://haos-test.local:8123`.
+- User-visible integration changes should be installed and exercised there
+  before an increment is considered release-ready.
+- This instance is intended for manual verification of install/upgrade flows,
+  config and options dialogs, entity naming, and other Home Assistant UI
+  behavior that is not reliably proven by Python-only tests.
+
 ## Quality Gates
 
 Every backend iteration is expected to satisfy the same checks locally and in
@@ -80,11 +90,31 @@ that future increments should proactively guard against:
   feature branch.
 - Invalid or corrupt brand assets can pass unnoticed in the repo while still
   degrading the HA/HACS UI experience.
-- Home Assistant options flows are sensitive to schema shape; generic list
-  fields and always-visible optional time selectors can break the frontend even
-  when local Python-side validation looks correct.
+- Home Assistant options flows are sensitive to schema shape and step design;
+  generic list fields, always-visible optional time selectors, and improvised
+  conditional fields can break the frontend even when local Python-side
+  validation looks correct.
+- Conditional inputs in Home Assistant should default to documented canonical
+  patterns, especially additional steps in data-entry flows instead of custom
+  same-step interactivity assumptions.
+- Options-flow behavior must be verified in the real HA UI for save, cancel,
+  re-open, and validation-error behavior; mock-heavy Python tests are useful
+  but do not capture all frontend/runtime edge cases.
+- Release automation promises must track actual completed actions. Do not tell
+  users that a follow-up release "will be" created later unless the current
+  turn also performs or conclusively verifies that action.
 - User-facing naming needs to be reviewed in the real HA UI, not only in code
   and tests.
+
+## Automation Opportunities
+
+- The current test instance already supports reliable manual smoke testing.
+- The next sensible automation step is a small scripted smoke-test checklist
+  for release candidates:
+  install/upgrade in HACS, restart HA, open the integration options flow,
+  validate save/cancel paths, and verify the expected entity surfaces.
+- If browser automation is introduced later, it should target the dedicated
+  test instance rather than the production Home Assistant environment.
 
 ## Documentation Map
 

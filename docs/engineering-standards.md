@@ -85,6 +85,14 @@ This document defines the non-negotiable engineering expectations for this repos
 
 ## Home Assistant integration rules
 
+- For Home Assistant integrations, always prefer official, documented, canonical
+  Home Assistant implementation patterns over custom or improvised approaches.
+- This preference is mandatory and admits no exceptions unless a documented
+  Home Assistant constraint makes the canonical approach impossible.
+- In particular for user-facing UI, config flows, options flows, selectors,
+  entities, and service surfaces, implementation decisions must follow Home
+  Assistant's documented UX and data-entry-flow conventions before considering
+  any repository-local workaround or invention.
 - Home Assistant config and options flows shall use HA-native selectors for
   user-facing inputs instead of generic Python container types.
 - Conditional user inputs shall be modeled as conditional form structure where
@@ -97,6 +105,13 @@ This document defines the non-negotiable engineering expectations for this repos
 - Any user-visible Home Assistant surface introduced in an increment shall
   receive at least one manual smoke test in a running HA instance before the
   increment is considered release-ready.
+- For this repository, the default manual Home Assistant smoke-test target is
+  the dedicated test instance at `http://haos-test.local:8123` unless a later
+  document explicitly supersedes it.
+- Home Assistant options and config flows shall be validated in the real HA UI
+  for step transitions, validation errors, cancel behavior, and state
+  persistence; Python-side tests alone are not sufficient release evidence for
+  those flows.
 
 ## Tooling baseline
 

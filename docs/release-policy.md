@@ -99,6 +99,7 @@ Examples:
    that exact ref to complete successfully.
 4. Perform the minimum required manual HA smoke test for newly introduced or
    changed user-visible surfaces.
+   Default target: `http://haos-test.local:8123`
 5. For branch-based HA testing, create the alpha pre-release only after steps
    3 and 4 are satisfied.
 6. After merge to `main`, allow the automatic beta pre-release to publish the
@@ -115,3 +116,10 @@ Examples:
 - `README.md` may mention that alpha or dev builds exist, but should not become
   a running release log.
 - Developer-oriented release procedures belong in `docs/`.
+
+## Operator Discipline
+
+- User-facing status updates about releases must describe completed facts, not
+  intended follow-up actions presented as if they were already assured.
+- If a pre-release still depends on pending GitHub checks, say that plainly and
+  only confirm publication after the release actually exists.
