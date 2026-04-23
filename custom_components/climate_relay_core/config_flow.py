@@ -402,11 +402,15 @@ def _merge_room_submission(
     stored_values: dict[str, Any],
     submitted_values: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge room form submissions while allowing optional selectors to be cleared."""
+    """Merge room form submissions while allowing cleared selectors to stay cleared."""
     merged = {**stored_values, **submitted_values}
-    for optional_entity_key in (CONF_HUMIDITY_ENTITY_ID, CONF_WINDOW_ENTITY_ID):
-        if optional_entity_key not in submitted_values:
-            merged[optional_entity_key] = None
+    for entity_key in (
+        CONF_PRIMARY_CLIMATE_ENTITY_ID,
+        CONF_HUMIDITY_ENTITY_ID,
+        CONF_WINDOW_ENTITY_ID,
+    ):
+        if entity_key not in submitted_values:
+            merged[entity_key] = None
     return merged
 
 

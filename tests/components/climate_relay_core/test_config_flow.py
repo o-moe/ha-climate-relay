@@ -930,7 +930,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             },
         )
 
-    async def test_merge_room_submission_clears_omitted_optional_selectors(self) -> None:
+    async def test_merge_room_submission_clears_omitted_entity_selectors(self) -> None:
         merged = _merge_room_submission(
             {
                 CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
@@ -1000,6 +1000,37 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                     }
                 ]
             },
+        )
+
+    async def test_room_step_rejects_omitted_primary_entity_in_existing_profile(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                    CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_room(
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_required"},
         )
 
     async def test_normalize_options_values_coerces_stored_wrapped_values(self) -> None:
