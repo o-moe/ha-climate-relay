@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock, patch
 
+import voluptuous as vol
 from homeassistant.helpers import selector
 
 from custom_components.climate_relay_core.config_flow import (
@@ -728,6 +729,44 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             validators[next(key for key in validators if key.schema == CONF_AWAY_TARGET_TYPE)],
             selector.SelectSelector,
         )
+
+    async def test_build_room_schema_omits_none_defaults_for_optional_entity_selectors(
+        self,
+    ) -> None:
+        schema = _build_room_schema(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: None,
+                CONF_HUMIDITY_ENTITY_ID: None,
+                CONF_WINDOW_ENTITY_ID: None,
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        validated = schema(
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        self.assertEqual(
+            validated,
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            },
+        )
+        for key in schema.schema:
+            if key.schema in {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID,
+                CONF_HUMIDITY_ENTITY_ID,
+                CONF_WINDOW_ENTITY_ID,
+            }:
+                self.assertIs(key.default, vol.UNDEFINED)
 
     async def test_normalize_person_entity_ids_supports_strings_and_selector_dicts(
         self,

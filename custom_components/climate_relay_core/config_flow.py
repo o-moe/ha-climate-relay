@@ -452,30 +452,49 @@ def _build_reset_time_schema(value: str | None) -> vol.Schema:
 
 def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
     """Build the regulation-profile schema."""
+    primary_climate_field: Any
+    humidity_field: Any
+    window_field: Any
+
+    if values[CONF_PRIMARY_CLIMATE_ENTITY_ID] is None:
+        primary_climate_field = vol.Optional(CONF_PRIMARY_CLIMATE_ENTITY_ID)
+    else:
+        primary_climate_field = vol.Optional(
+            CONF_PRIMARY_CLIMATE_ENTITY_ID,
+            default=values[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+        )
+
+    if values[CONF_HUMIDITY_ENTITY_ID] is None:
+        humidity_field = vol.Optional(CONF_HUMIDITY_ENTITY_ID)
+    else:
+        humidity_field = vol.Optional(
+            CONF_HUMIDITY_ENTITY_ID,
+            default=values[CONF_HUMIDITY_ENTITY_ID],
+        )
+
+    if values[CONF_WINDOW_ENTITY_ID] is None:
+        window_field = vol.Optional(CONF_WINDOW_ENTITY_ID)
+    else:
+        window_field = vol.Optional(
+            CONF_WINDOW_ENTITY_ID,
+            default=values[CONF_WINDOW_ENTITY_ID],
+        )
+
     return vol.Schema(
         {
-            vol.Optional(
-                CONF_PRIMARY_CLIMATE_ENTITY_ID,
-                default=values[CONF_PRIMARY_CLIMATE_ENTITY_ID],
-            ): selector.EntitySelector(
+            primary_climate_field: selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="climate",
                     multiple=False,
                 )
             ),
-            vol.Optional(
-                CONF_HUMIDITY_ENTITY_ID,
-                default=values[CONF_HUMIDITY_ENTITY_ID],
-            ): selector.EntitySelector(
+            humidity_field: selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="sensor",
                     multiple=False,
                 )
             ),
-            vol.Optional(
-                CONF_WINDOW_ENTITY_ID,
-                default=values[CONF_WINDOW_ENTITY_ID],
-            ): selector.EntitySelector(
+            window_field: selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="binary_sensor",
                     multiple=False,
