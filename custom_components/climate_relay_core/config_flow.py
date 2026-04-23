@@ -8,6 +8,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
@@ -180,6 +181,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 submitted = _normalize_room_options({**room_values, **user_input})
+                submitted = _resolve_room_entity_ids(self.hass, submitted)
                 if not submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID]:
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
                 elif (
@@ -373,6 +375,39 @@ def _normalize_target_type_selector(raw_value: Any) -> str:
     if normalized not in {"absolute", "relative"}:
         raise ValueError(f"Unsupported away target type: {raw_value!r}")
     return normalized
+
+
+def _resolve_room_entity_ids(
+    hass: Any,
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve selector UUIDs to stable entity IDs before validation and storage."""
+    resolved = dict(values)
+    resolved[CONF_PRIMARY_CLIMATE_ENTITY_ID] = _resolve_entity_id(
+        hass,
+        values.get(CONF_PRIMARY_CLIMATE_ENTITY_ID),
+    )
+    resolved[CONF_HUMIDITY_ENTITY_ID] = _resolve_entity_id(
+        hass,
+        values.get(CONF_HUMIDITY_ENTITY_ID),
+    )
+    resolved[CONF_WINDOW_ENTITY_ID] = _resolve_entity_id(
+        hass,
+        values.get(CONF_WINDOW_ENTITY_ID),
+    )
+    return resolved
+
+
+def _resolve_entity_id(
+    hass: Any,
+    entity_id_or_uuid: str | None,
+) -> str | None:
+    """Resolve an entity ID or registry UUID to a plain entity_id."""
+    if entity_id_or_uuid is None:
+        return None
+    if "." in entity_id_or_uuid:
+        return entity_id_or_uuid
+    return er.async_resolve_entity_id(er.async_get(hass), entity_id_or_uuid)
 
 
 def _unwrap_selector_value(raw_value: Any) -> Any:

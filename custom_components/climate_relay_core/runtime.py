@@ -367,7 +367,8 @@ def _resolve_area_reference(
     device_registry = dr.async_get(hass)
     area_registry = ar.async_get(hass)
 
-    entity_entry = entity_registry.async_get(primary_climate_entity_id)
+    resolved_entity_id = er.async_resolve_entity_id(entity_registry, primary_climate_entity_id)
+    entity_entry = entity_registry.async_get(resolved_entity_id)
     if entity_entry is None:
         return AreaReference(area_id=None, area_name=None)
 

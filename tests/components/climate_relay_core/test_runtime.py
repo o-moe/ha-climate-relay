@@ -276,6 +276,42 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(room_config.area_name, "Living Room")
         self.assertEqual(room_config.display_name, "Living Room")
 
+    async def test_resolve_area_reference_accepts_entity_registry_uuid(self) -> None:
+        hass = Mock()
+        entity_registry = Mock()
+        device_registry = Mock()
+        area_registry = Mock()
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_resolve_entity_id",
+                return_value="climate.living_room",
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dr.async_get",
+                return_value=device_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.ar.async_get",
+                return_value=area_registry,
+            ),
+        ):
+            entity_registry.async_get.return_value = SimpleNamespace(
+                area_id=None,
+                device_id="device-1",
+            )
+            device_registry.async_get.return_value = SimpleNamespace(area_id="device_area")
+            area_registry.async_get_area.return_value = SimpleNamespace(name="Device Area")
+
+            resolved = _resolve_area_reference(hass, "uuid-climate")
+
+        self.assertEqual(resolved.area_id, "device_area")
+        self.assertEqual(resolved.area_name, "Device Area")
+
     async def test_resolve_profile_display_name_prefers_area_then_legacy_then_entity_name(
         self,
     ) -> None:
@@ -314,6 +350,10 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
             patch(
                 "custom_components.climate_relay_core.runtime.er.async_get",
                 return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_resolve_entity_id",
+                side_effect=lambda _registry, value: value,
             ),
             patch(
                 "custom_components.climate_relay_core.runtime.dr.async_get",
