@@ -180,7 +180,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
-                submitted = _normalize_room_options({**room_values, **user_input})
+                submitted = _normalize_room_options(_merge_room_submission(room_values, user_input))
                 submitted = _resolve_room_entity_ids(self.hass, submitted)
                 if not submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID]:
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
@@ -396,6 +396,18 @@ def _resolve_room_entity_ids(
         values.get(CONF_WINDOW_ENTITY_ID),
     )
     return resolved
+
+
+def _merge_room_submission(
+    stored_values: dict[str, Any],
+    submitted_values: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge room form submissions while allowing optional selectors to be cleared."""
+    merged = {**stored_values, **submitted_values}
+    for optional_entity_key in (CONF_HUMIDITY_ENTITY_ID, CONF_WINDOW_ENTITY_ID):
+        if optional_entity_key not in submitted_values:
+            merged[optional_entity_key] = None
+    return merged
 
 
 def _resolve_entity_id(
