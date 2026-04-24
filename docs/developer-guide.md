@@ -125,6 +125,8 @@ that future increments should proactively guard against:
 - Discovery: [discovery.md](./discovery.md)
 - Requirements: [requirements.md](./requirements.md)
 - Verification Matrix: [verification-matrix.md](./verification-matrix.md)
+- HA automation strategy: [ha-automation-strategy.md](./ha-automation-strategy.md)
+- GUI smoke suites: [gui-smoke-suites/README.md](./gui-smoke-suites/README.md)
 - Implementation Plan: [implementation-plan.md](./implementation-plan.md)
 - Release Policy: [release-policy.md](./release-policy.md)
 - Rules: [rules.md](./rules.md)
