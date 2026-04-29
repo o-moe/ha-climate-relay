@@ -18,6 +18,12 @@ The intended execution order for a real HA acceptance run is:
 3. execute the iteration-specific GUI smoke suite in the Playwright Chromium
    test browser
 
+If an iteration depends on a special HA fixture, add that preparation step
+explicitly before the GUI suite. Example: iteration `1.2` now uses
+`scripts/ha_prepare_no_area_fixture.py` to guarantee a dedicated area-less
+`Virtual Climate` source for the `primary_climate_area_required` validation
+path.
+
 The API scripts verify environment readiness and backend-facing HA surfaces.
 The GUI suite then verifies the narrow HA frontend behaviors that matter for
 that iteration.
@@ -26,6 +32,24 @@ The Codex in-app browser remains useful for quick inspection, but the current
 Home Assistant configuration controls are more reliably automated in Playwright
 Chromium. Treat Playwright Chromium as the default execution path for real GUI
 smoke runs.
+
+Current single-command regression entry point:
+
+```bash
+export HOME_ASSISTANT_TOKEN='<long-lived-token>'
+uv run python scripts/run_iteration_acceptance.py --iteration 1.2
+```
+
+This runner is the intended anchor for continued iteration work:
+
+- when an iteration adds or changes a GUI flow, expand its acceptance runner
+  in parallel with the implementation
+- keep the iteration suite and the runner aligned, so the documented smoke
+  cases are directly executable
+- install the intended iteration build explicitly when HACS `latest_version`
+  does not identify that build
+- prefer failing the CLI run over silently downgrading checks, so regression
+  status is obvious from one command
 
 ## Naming
 
@@ -56,4 +80,5 @@ Examples:
 ## Current Suites
 
 - [iteration-1.1.md](./iteration-1.1.md)
+- [iteration-1.2.md](./iteration-1.2.md)
 - [template.md](./template.md)

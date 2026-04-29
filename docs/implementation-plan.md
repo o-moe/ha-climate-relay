@@ -55,6 +55,10 @@ contract:
   increment.
 - Requirements assigned to an increment must be traceable to tests and, where
   applicable, to design-review evidence.
+- User-visible Home Assistant GUI/UX changes must include or extend an
+  executable iteration acceptance runner in the same increment. The runner is
+  part of the delivery artifact and must be usable as regression evidence for
+  later iterations.
 
 ## Increment slicing policy
 
@@ -65,7 +69,8 @@ owner in a meaningful manual acceptance step.
 Every increment must therefore satisfy all of the following:
 
 - deliver a user-observable outcome in Home Assistant
-- be manually testable in a realistic Home Assistant setup
+- be executable as a bounded acceptance run in the dedicated Home Assistant
+  test instance whenever the behavior is automatable
 - provide bounded acceptance scope for product-owner sign-off
 - still preserve the engineering contract for TDD, quality gates, and
   documentation

@@ -93,7 +93,33 @@ def _build_parser() -> argparse.ArgumentParser:
             f"Defaults: {', '.join(DEFAULT_UPDATE_ENTITIES)}"
         ),
     )
+    parser.add_argument(
+        "--install-version",
+        action="append",
+        dest="install_versions",
+        default=None,
+        metavar="ENTITY_ID=VERSION",
+        help=(
+            "Install an explicit version for one update entity instead of its latest "
+            "reported version. Can be passed multiple times."
+        ),
+    )
     return parser
+
+
+def _parse_install_versions(raw_values: list[str] | None) -> dict[str, str]:
+    versions: dict[str, str] = {}
+    for raw_value in raw_values or []:
+        entity_id, separator, version = raw_value.partition("=")
+        entity_id = entity_id.strip()
+        version = version.strip()
+        if separator != "=" or not entity_id or not version:
+            raise PrepareError(
+                f"Invalid --install-version value {raw_value!r}. "
+                "Expected ENTITY_ID=VERSION."
+            )
+        versions[entity_id] = version
+    return versions
 
 
 def _request_json(
@@ -233,6 +259,7 @@ def _process_update_entity(
     base_url: str,
     token: str,
     entity_id: str,
+    install_version: str | None,
     update_timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> list[str]:
@@ -240,13 +267,15 @@ def _process_update_entity(
     lines = [
         (
             f"{entity_id}: installed={before.installed_version!r}, "
-            f"latest={before.latest_version!r}, skipped={before.skipped_version!r}"
+            f"latest={before.latest_version!r}, target={install_version!r}, "
+            f"skipped={before.skipped_version!r}"
         )
     ]
 
-    needs_install = before.installed_version != before.latest_version
+    target_version = install_version or before.latest_version
+    needs_install = before.installed_version != target_version
     if not needs_install:
-        lines.append(f"{entity_id}: already up to date.")
+        lines.append(f"{entity_id}: already at target version {target_version!r}.")
         return lines
 
     if before.skipped_version is not None:
@@ -259,18 +288,21 @@ def _process_update_entity(
         )
         lines.append(f"{entity_id}: cleared skipped version {before.skipped_version!r}.")
 
+    install_payload: dict[str, Any] = {"entity_id": entity_id}
+    if install_version is not None:
+        install_payload["version"] = install_version
     _call_service(
         base_url=base_url,
         token=token,
         domain="update",
         service="install",
-        payload={"entity_id": entity_id},
+        payload=install_payload,
     )
     after = _wait_for_update_completion(
         base_url=base_url,
         token=token,
         entity_id=entity_id,
-        expected_version=before.latest_version,
+        expected_version=target_version,
         timeout_seconds=update_timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
@@ -288,6 +320,7 @@ def _run_prepare(args: argparse.Namespace) -> list[str]:
         )
 
     entity_ids = tuple(args.entity_ids or DEFAULT_UPDATE_ENTITIES)
+    install_versions = _parse_install_versions(args.install_versions)
     lines = [f"Preparing HA test instance: {args.base_url}"]
 
     for entity_id in entity_ids:
@@ -296,6 +329,7 @@ def _run_prepare(args: argparse.Namespace) -> list[str]:
                 base_url=args.base_url,
                 token=token,
                 entity_id=entity_id,
+                install_version=install_versions.get(entity_id),
                 update_timeout_seconds=args.update_timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
             )

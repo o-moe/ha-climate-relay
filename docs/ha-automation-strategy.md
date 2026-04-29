@@ -191,6 +191,43 @@ uv run python scripts/ha_prepare_test_instance.py
 uv run python scripts/ha_smoke_test.py
 ```
 
+Dedicated fixture preparation for the iteration-1.2 no-area validation path:
+
+```bash
+export HOME_ASSISTANT_TOKEN='<long-lived-token>'
+uv run python scripts/ha_prepare_no_area_fixture.py
+```
+
+Single-command iteration-1.2 regression run:
+
+```bash
+export HOME_ASSISTANT_TOKEN='<long-lived-token>'
+uv run python scripts/run_iteration_acceptance.py --iteration 1.2
+```
+
+The runner installs the iteration-specific Climate Relay version explicitly.
+For iteration `1.2`, that version is `v0.1.0-alpha.8`; the runner must not rely
+on HACS `latest_version`, because HACS can report a commit-like version that is
+not the intended iteration build.
+
+Verified on 2026-04-25 against `http://haos-test.local:8123`:
+
+- `ha_prepare_no_area_fixture.py` can create a separate `Virtual Climate`
+  config entry titled `No Area Fixture`
+- the resulting dedicated climate entity is
+  `climate.no_area_fixture_no_area_fixture`
+- the dedicated fixture remains intentionally unassigned to any Home Assistant
+  area and can therefore drive the
+  `primary_climate_area_required` validation path without mutating the ordinary
+  `Living Room` or `Office` fixtures
+- the dedicated fixture is also verified in Playwright Chromium:
+  selecting `No Area Fixture` in the `Climate Relay` `Regulation Profile`
+  form renders the inline validation
+  `Assign the primary climate entity to a Home Assistant area first.`
+- `scripts/run_iteration_acceptance.py --iteration 1.2` is now the repo-local
+  entry point that chains HA preparation, backend smoke checks, dedicated
+  fixture setup, and the critical GUI regression path for iteration `1.2`
+
 Verified on 2026-04-23 against `http://haos-test.local:8123`:
 
 - `ha_prepare_test_instance.py` completed successfully end-to-end

@@ -112,6 +112,16 @@ This document defines the non-negotiable engineering expectations for this repos
   for step transitions, validation errors, cancel behavior, and state
   persistence; Python-side tests alone are not sufficient release evidence for
   those flows.
+- New Home Assistant GUI/UX behavior shall be delivered together with an
+  iteration-specific executable acceptance runner. The runner must prepare the
+  real HA test instance, install the intended build or release version, prepare
+  required fixtures, execute API smoke checks, and run the relevant Playwright
+  Chromium GUI checks.
+- Manual HA acceptance may supplement the executable runner, but it shall not
+  be the primary release evidence for user-visible increments once the behavior
+  is automatable.
+- The iteration acceptance runner must fail loudly on browser automation errors
+  and must not treat Playwright-reported `### Error` output as success.
 
 ## Tooling baseline
 
