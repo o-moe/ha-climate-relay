@@ -9,9 +9,11 @@ from custom_components.climate_relay_core.domain import (
     EffectivePresence,
     EffectiveTarget,
     GlobalMode,
+    RoomTarget,
     UnknownStateHandling,
     WindowActionType,
     resolve_presence_mode,
+    resolve_room_target,
     resolve_window_action,
 )
 
@@ -54,6 +56,38 @@ class DomainExportsTests(unittest.TestCase):
     def test_effective_target_is_a_public_domain_type(self) -> None:
         target = EffectiveTarget(hvac_mode="heat", preset_mode=None, target_temperature=21.0)
         self.assertEqual(target.target_temperature, 21.0)
+
+    def test_room_target_is_a_public_domain_type(self) -> None:
+        target = RoomTarget(mode="absolute", temperature=21.0)
+        self.assertEqual(target.temperature, 21.0)
+
+
+class ResolveRoomTargetTests(unittest.TestCase):
+    """Test room target resolution behavior."""
+
+    def test_home_presence_uses_home_target(self) -> None:
+        result = resolve_room_target(
+            EffectivePresence.HOME,
+            home_target=RoomTarget(mode="absolute", temperature=21.0),
+            away_target=RoomTarget(mode="absolute", temperature=17.0),
+        )
+        self.assertEqual(result, 21.0)
+
+    def test_away_presence_can_use_absolute_target(self) -> None:
+        result = resolve_room_target(
+            EffectivePresence.AWAY,
+            home_target=RoomTarget(mode="absolute", temperature=21.0),
+            away_target=RoomTarget(mode="absolute", temperature=17.0),
+        )
+        self.assertEqual(result, 17.0)
+
+    def test_away_presence_can_use_relative_target_based_on_home_target(self) -> None:
+        result = resolve_room_target(
+            EffectivePresence.AWAY,
+            home_target=RoomTarget(mode="absolute", temperature=21.0),
+            away_target=RoomTarget(mode="relative", temperature=-2.5),
+        )
+        self.assertEqual(result, 18.5)
 
 
 class ResolveWindowActionTests(unittest.TestCase):

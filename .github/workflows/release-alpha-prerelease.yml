@@ -30,12 +30,21 @@ jobs:
       - name: Read release metadata
         id: metadata
         run: |
+          TARGET_SHA="$(git rev-parse HEAD)"
           VERSION="$(python - <<'PY'
           import json
           from pathlib import Path
 
           manifest = json.loads(Path("custom_components/climate_relay_core/manifest.json").read_text())
           print(manifest["version"])
+          PY
+          )"
+          EPIC="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["epic"])
           PY
           )"
           ITERATION="$(python - <<'PY'
@@ -46,11 +55,26 @@ jobs:
           print(plan["iteration"])
           PY
           )"
+          TARGET_VERSION="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          plan = json.loads(Path(".github/release-plan.json").read_text())
+          print(plan["target_version"])
+          PY
+          )"
+          if [ "${VERSION}" != "${TARGET_VERSION}" ]; then
+            echo "manifest version ${VERSION} does not match release plan target_version ${TARGET_VERSION}" >&2
+            exit 1
+          fi
           TAG="v${VERSION}-alpha.${{ inputs.alpha_number }}"
-          TITLE="Iteration ${ITERATION} Alpha ${{ inputs.alpha_number }}"
+          TITLE="Epic ${EPIC} / Iteration ${ITERATION} Alpha ${{ inputs.alpha_number }}"
           {
             echo "version=${VERSION}"
+            echo "epic=${EPIC}"
             echo "iteration=${ITERATION}"
+            echo "target_version=${TARGET_VERSION}"
+            echo "target_sha=${TARGET_SHA}"
             echo "tag=${TAG}"
             echo "title=${TITLE}"
           } >> "$GITHUB_OUTPUT"
@@ -60,7 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.metadata.outputs.tag }}" \
-            --target "${GITHUB_SHA}" \
+            --target "${{ steps.metadata.outputs.target_sha }}" \
             --title "${{ steps.metadata.outputs.title }}" \
-            --notes "Alpha pre-release for iteration ${{ steps.metadata.outputs.iteration }} from ref \`${{ inputs.target_ref }}\` at commit \`${GITHUB_SHA}\`." \
+            --notes "Alpha pre-release for epic ${{ steps.metadata.outputs.epic }}, iteration ${{ steps.metadata.outputs.iteration }}, targeting stable version v${{ steps.metadata.outputs.version }}, from ref \`${{ inputs.target_ref }}\` at commit \`${{ steps.metadata.outputs.target_sha }}\`." \
             --prerelease

@@ -7,5 +7,6 @@ coverage.xml
 dist/
 frontend/dist/
 frontend/node_modules/
+.playwright-cli/
 __pycache__/
 *.pyc

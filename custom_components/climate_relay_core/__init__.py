@@ -12,11 +12,11 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, SERVICE_SET_GLOBAL_MODE
 from .domain import GlobalMode
-from .runtime import GlobalRuntime, build_global_config
+from .runtime import GlobalRuntime, build_global_config, build_room_configs
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SELECT]
+PLATFORMS: list[Platform] = [Platform.SELECT, Platform.CLIMATE]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
@@ -34,6 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "title": entry.title,
         "runtime": runtime,
+        "room_configs": build_room_configs(entry.data, entry.options, hass=hass),
         "remove_listener": remove_listener,
     }
     _async_register_services(hass)
@@ -88,6 +89,5 @@ async def _async_handle_set_global_mode(service_call: ServiceCall) -> None:
 
 
 async def _async_handle_entry_update(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Refresh runtime configuration after an options update."""
-    runtime: GlobalRuntime = hass.data[DOMAIN][entry.entry_id]["runtime"]
-    runtime.update_config(build_global_config(entry.data, entry.options))
+    """Reload the config entry after an options update."""
+    await hass.config_entries.async_reload(entry.entry_id)

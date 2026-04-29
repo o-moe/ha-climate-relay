@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
+import voluptuous as vol
 from homeassistant.helpers import selector
 
 from custom_components.climate_relay_core.config_flow import (
@@ -12,27 +14,44 @@ from custom_components.climate_relay_core.config_flow import (
     ClimateRelayCoreOptionsFlow,
     _build_options_schema,
     _build_reset_time_schema,
+    _build_room_schema,
+    _merge_room_submission,
     _normalize_bool,
     _normalize_options_values,
     _normalize_person_entity_ids,
     _normalize_reset_time,
+    _normalize_room_options,
     _normalize_select_value,
     _normalize_time_field_value,
+    _resolve_entity_id,
+    _resolve_room_entity_ids,
     _unwrap_selector_value,
 )
 from custom_components.climate_relay_core.const import (
+    CONF_AWAY_TARGET_TEMPERATURE,
+    CONF_AWAY_TARGET_TYPE,
     CONF_FALLBACK_TEMPERATURE,
+    CONF_HOME_TARGET_TEMPERATURE,
+    CONF_HUMIDITY_ENTITY_ID,
     CONF_MANUAL_OVERRIDE_RESET_ENABLED,
     CONF_MANUAL_OVERRIDE_RESET_TIME,
     CONF_PERSON_ENTITY_IDS,
+    CONF_PRIMARY_CLIMATE_ENTITY_ID,
+    CONF_ROOMS,
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
     CONF_VERBOSE_LOGGING,
+    CONF_WINDOW_ENTITY_ID,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_NAME,
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DOMAIN,
 )
+
+
+def _resolved_area() -> SimpleNamespace:
+    """Return a resolved Home Assistant area for tests."""
+    return SimpleNamespace(area_id="living_room", area_name="Living Room")
 
 
 class ConfigFlowTests(IsolatedAsyncioTestCase):
@@ -125,6 +144,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
         expected_form_result = {"type": "form"}
         expected_entry_result = {"type": "create_entry"}
         flow.async_show_form = Mock(return_value=expected_form_result)
@@ -146,6 +166,24 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
         result = await flow.async_step_reset_time({CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30"})
 
+        self.assertEqual(result, expected_form_result)
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                    CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.5,
+                    CONF_AWAY_TARGET_TYPE: "relative",
+                    CONF_AWAY_TARGET_TEMPERATURE: -2.0,
+                }
+            )
+
         self.assertEqual(result, expected_entry_result)
         flow.async_create_entry.assert_called_once_with(
             title="",
@@ -157,6 +195,16 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30:00",
                 CONF_SIMULATION_MODE: True,
                 CONF_VERBOSE_LOGGING: True,
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                        CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                        CONF_HOME_TARGET_TEMPERATURE: 20.5,
+                        CONF_AWAY_TARGET_TYPE: "relative",
+                        CONF_AWAY_TARGET_TEMPERATURE: -2.0,
+                    }
+                ],
             },
         )
 
@@ -164,7 +212,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
         expected_result = {"type": "create_entry"}
+        flow.async_show_form = Mock(return_value={"type": "form"})
         flow.async_create_entry = Mock(return_value=expected_result)
 
         result = await flow.async_step_init(
@@ -179,6 +229,22 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             }
         )
 
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+
         self.assertEqual(result, expected_result)
         flow.async_create_entry.assert_called_once_with(
             title="",
@@ -190,6 +256,16 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                 CONF_SIMULATION_MODE: False,
                 CONF_VERBOSE_LOGGING: False,
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: None,
+                        CONF_WINDOW_ENTITY_ID: None,
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                        CONF_AWAY_TARGET_TYPE: "absolute",
+                        CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                    }
+                ],
             },
         )
 
@@ -197,7 +273,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
         expected_result = {"type": "create_entry"}
+        flow.async_show_form = Mock(return_value={"type": "form"})
         flow.async_create_entry = Mock(return_value=expected_result)
 
         result = await flow.async_step_init(
@@ -212,6 +290,24 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             }
         )
 
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: {"value": "climate.living_room"},
+                    CONF_HUMIDITY_ENTITY_ID: {"value": "sensor.living_room_humidity"},
+                    CONF_WINDOW_ENTITY_ID: {"value": "binary_sensor.living_room_window"},
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: {"value": "absolute"},
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+
         self.assertEqual(result, expected_result)
         flow.async_create_entry.assert_called_once_with(
             title="",
@@ -223,6 +319,85 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                 CONF_SIMULATION_MODE: True,
                 CONF_VERBOSE_LOGGING: False,
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                        CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                        CONF_AWAY_TARGET_TYPE: "absolute",
+                        CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                    }
+                ],
+            },
+        )
+
+    async def test_room_step_resolves_registry_uuids_before_area_validation(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.config_flow.er.async_get",
+                return_value="registry",
+            ),
+            patch(
+                "custom_components.climate_relay_core.config_flow.er.async_resolve_entity_id",
+                side_effect=lambda _registry, value: {
+                    "uuid-climate": "climate.living_room",
+                    "uuid-humidity": "sensor.living_room_humidity",
+                }[value],
+            ),
+            patch(
+                "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+                return_value=_resolved_area(),
+            ),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "uuid-climate",
+                    CONF_HUMIDITY_ENTITY_ID: "uuid-humidity",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+
+        self.assertEqual(result, {"type": "create_entry"})
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_MANUAL_OVERRIDE_RESET_TIME: None,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                        CONF_WINDOW_ENTITY_ID: None,
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                        CONF_AWAY_TARGET_TYPE: "absolute",
+                        CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                    }
+                ],
             },
         )
 
@@ -230,7 +405,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
         expected_result = {"type": "create_entry"}
+        flow.async_show_form = Mock(return_value={"type": "form"})
         flow.async_create_entry = Mock(return_value=expected_result)
 
         result = await flow.async_step_init(
@@ -244,6 +421,21 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             }
         )
 
+        self.assertEqual(result, {"type": "form"})
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+                }
+            )
+
         self.assertEqual(result, expected_result)
         flow.async_create_entry.assert_called_once_with(
             title="",
@@ -255,6 +447,16 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                 CONF_SIMULATION_MODE: True,
                 CONF_VERBOSE_LOGGING: False,
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: None,
+                        CONF_WINDOW_ENTITY_ID: None,
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                        CONF_AWAY_TARGET_TYPE: "absolute",
+                        CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+                    }
+                ],
             },
         )
 
@@ -324,6 +526,139 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "reset_time")
+
+    async def test_init_step_routes_valid_input_to_room_step(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+
+    async def test_room_step_rejects_missing_primary_climate_entity(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        await flow.async_step_room(
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+            }
+        )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_required"},
+        )
+
+    async def test_room_step_rejects_primary_climate_without_area_mapping(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=SimpleNamespace(area_id=None, area_name=None),
+        ):
+            await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+                }
+            )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_area_required"},
+        )
+
+    async def test_reset_time_step_surfaces_unknown_error_for_invalid_time(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: True,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+        flow.async_show_form.reset_mock()
+
+        await flow.async_step_reset_time({CONF_MANUAL_OVERRIDE_RESET_TIME: "bad-time"})
+
+        self.assertEqual(flow.async_show_form.call_args.kwargs["errors"], {"base": "unknown"})
+
+    async def test_room_step_surfaces_unknown_error_for_invalid_entity_payload(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        await flow.async_step_room(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: 123,
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+            }
+        )
+
+        self.assertEqual(flow.async_show_form.call_args.kwargs["errors"], {"base": "unknown"})
 
     async def test_init_step_preserves_submitted_presence_selection_when_validation_fails(
         self,
@@ -428,6 +763,83 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         ]
         self.assertIsInstance(reset_time, selector.TimeSelector)
 
+    async def test_build_room_schema_uses_expected_selectors(self) -> None:
+        schema = _build_room_schema(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                CONF_HUMIDITY_ENTITY_ID: None,
+                CONF_WINDOW_ENTITY_ID: None,
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+        validators = schema.schema
+        primary_climate = validators[
+            next(key for key in validators if key.schema == CONF_PRIMARY_CLIMATE_ENTITY_ID)
+        ]
+        home_target = validators[
+            next(key for key in validators if key.schema == CONF_HOME_TARGET_TEMPERATURE)
+        ]
+        self.assertIsInstance(
+            primary_climate,
+            selector.EntitySelector,
+        )
+        self.assertIsInstance(
+            validators[next(key for key in validators if key.schema == CONF_HUMIDITY_ENTITY_ID)],
+            selector.EntitySelector,
+        )
+        self.assertIsInstance(
+            validators[next(key for key in validators if key.schema == CONF_WINDOW_ENTITY_ID)],
+            selector.EntitySelector,
+        )
+        self.assertIsInstance(
+            home_target,
+            selector.NumberSelector,
+        )
+        self.assertIsInstance(
+            validators[next(key for key in validators if key.schema == CONF_AWAY_TARGET_TYPE)],
+            selector.SelectSelector,
+        )
+
+    async def test_build_room_schema_omits_none_defaults_for_optional_entity_selectors(
+        self,
+    ) -> None:
+        schema = _build_room_schema(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: None,
+                CONF_HUMIDITY_ENTITY_ID: None,
+                CONF_WINDOW_ENTITY_ID: None,
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        validated = schema(
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        self.assertEqual(
+            validated,
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            },
+        )
+        for key in schema.schema:
+            if key.schema in {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID,
+                CONF_HUMIDITY_ENTITY_ID,
+                CONF_WINDOW_ENTITY_ID,
+            }:
+                self.assertIs(key.default, vol.UNDEFINED)
+
     async def test_normalize_person_entity_ids_supports_strings_and_selector_dicts(
         self,
     ) -> None:
@@ -475,6 +887,152 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported select selector value"):
             _normalize_select_value({"value": 123})
 
+    async def test_resolve_entity_id_accepts_none(self) -> None:
+        self.assertIsNone(_resolve_entity_id(Mock(), None))
+
+    async def test_resolve_room_entity_ids_converts_uuid_inputs(self) -> None:
+        hass = Mock()
+        with (
+            patch(
+                "custom_components.climate_relay_core.config_flow.er.async_get",
+                return_value="registry",
+            ),
+            patch(
+                "custom_components.climate_relay_core.config_flow.er.async_resolve_entity_id",
+                side_effect=lambda _registry, value: {
+                    "uuid-climate": "climate.living_room",
+                    "uuid-humidity": "sensor.living_room_humidity",
+                    "uuid-window": "binary_sensor.living_room_window",
+                }[value],
+            ),
+        ):
+            resolved = _resolve_room_entity_ids(
+                hass,
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "uuid-climate",
+                    CONF_HUMIDITY_ENTITY_ID: "uuid-humidity",
+                    CONF_WINDOW_ENTITY_ID: "uuid-window",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                },
+            )
+
+        self.assertEqual(
+            resolved,
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            },
+        )
+
+    async def test_merge_room_submission_clears_omitted_entity_selectors(self) -> None:
+        merged = _merge_room_submission(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            },
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            },
+        )
+
+        self.assertEqual(merged[CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.living_room")
+        self.assertIsNone(merged[CONF_HUMIDITY_ENTITY_ID])
+        self.assertIsNone(merged[CONF_WINDOW_ENTITY_ID])
+
+    async def test_room_step_clears_optional_entities_when_selector_fields_are_omitted(
+        self,
+    ) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                    CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+
+        self.assertEqual(result, {"type": "create_entry"})
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                        CONF_HUMIDITY_ENTITY_ID: None,
+                        CONF_WINDOW_ENTITY_ID: None,
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                        CONF_AWAY_TARGET_TYPE: "absolute",
+                        CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                    }
+                ]
+            },
+        )
+
+    async def test_room_step_rejects_omitted_primary_entity_in_existing_profile(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
+                    CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_room(
+            {
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            }
+        )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_required"},
+        )
+
     async def test_normalize_options_values_coerces_stored_wrapped_values(self) -> None:
         normalized = _normalize_options_values(
             {
@@ -499,3 +1057,31 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertIsNone(_normalize_time_field_value(None))
         self.assertIsNone(_normalize_time_field_value(""))
         self.assertEqual(_normalize_time_field_value({"value": "06:15:00"}), "06:15:00")
+
+    async def test_normalize_room_options_coerces_stored_wrapped_values(self) -> None:
+        normalized = _normalize_room_options(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: {"value": "climate.living_room"},
+                CONF_HUMIDITY_ENTITY_ID: {"value": "sensor.living_room_humidity"},
+                CONF_WINDOW_ENTITY_ID: {"value": "binary_sensor.living_room_window"},
+                CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                CONF_AWAY_TARGET_TYPE: {"value": "relative"},
+                CONF_AWAY_TARGET_TEMPERATURE: -2.0,
+            }
+        )
+
+        self.assertEqual(normalized[CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.living_room")
+        self.assertEqual(normalized[CONF_HUMIDITY_ENTITY_ID], "sensor.living_room_humidity")
+        self.assertEqual(normalized[CONF_WINDOW_ENTITY_ID], "binary_sensor.living_room_window")
+        self.assertEqual(normalized[CONF_AWAY_TARGET_TYPE], "relative")
+
+    async def test_normalize_room_options_rejects_invalid_target_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported away target type"):
+            _normalize_room_options(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "invalid",
+                    CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+                }
+            )

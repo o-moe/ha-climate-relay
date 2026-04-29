@@ -38,7 +38,9 @@ Status terms used in this document:
 ## 2. Purpose and scope
 
 ClimateRelayCore shall provide a backend-first climate control solution for Home
-Assistant that organizes behavior around rooms instead of raw entities.
+Assistant that organizes behavior around Home Assistant areas instead of raw
+entities while preserving Home Assistant as the source of truth for the house
+structure.
 
 The initial scope of this specification covers:
 
@@ -55,10 +57,10 @@ The initial scope does not yet cover:
 
 ## 3. Product vision
 
-Users shall be able to manage climate behavior at room level through one
-coherent backend model, with deterministic automation behavior and room-specific
-configuration, without coupling the solution to a specific thermostat vendor or
-frontend implementation.
+Users shall be able to manage climate behavior at area level through one
+coherent backend model, with deterministic automation behavior and
+area-specific configuration, without coupling the solution to a specific
+thermostat vendor or frontend implementation.
 
 ## 4. Stakeholders
 
@@ -75,9 +77,10 @@ frontend implementation.
 ClimateRelayCore operates as a Home Assistant custom integration and interacts
 with:
 
-- Home Assistant `climate` entities as the controlled room devices
-- optional Home Assistant humidity sensors per room
-- optional Home Assistant window contacts per room
+- Home Assistant `climate` entities as the controlled area devices
+- Home Assistant areas and floors as the canonical house structure
+- optional Home Assistant humidity sensors per area
+- optional Home Assistant window contacts per area
 - optional Home Assistant `person` entities for presence resolution
 - a future frontend that consumes backend-owned configuration and state
 
@@ -86,29 +89,34 @@ evaluation logic.
 
 ## 6. Definitions and glossary
 
-- Room: Logical control unit consisting of one primary climate entity and
-  optional supporting sensors
+- Regulation profile: Logical control unit canonically anchored to one primary
+  Home Assistant `climate` entity and consisting of that primary climate entity
+  plus optional supporting sensors
+- Area: Home Assistant physical location from the area registry, used as the
+  canonical navigation model for the house layout
 - Global mode: Repository-level operating mode with values `auto`, `home`, or
   `away`
 - Effective presence: Presence result resolved from global mode and person
   states, with values `home` or `away`
 - Effective target: Resolved commandable target for a climate entity, including
   HVAC mode, preset mode, and/or target temperature
-- Room target: User-configurable temperature-based desired room state that is
+- Area target: User-configurable temperature-based desired area state that is
   used as an input to rule evaluation, for example for `home`, `away`,
   schedule blocks, or manual overrides
-- Manual room override: Explicit temporary or persistent deviation from schedule
-  behavior for one room
-- Window override: Temporary room state activated when a configured window is
+- Manual area override: Explicit temporary or persistent deviation from
+  schedule behavior for one area-bound regulation profile
+- Window override: Temporary area state activated when a configured window is
   open long enough to pass the configured delay
-- Schedule time block: Time interval with a defined target state for a room
+- Schedule time block: Time interval with a defined target state for one area
 - Fallback state: Safe default target used when no higher-priority rule provides
   a target
 
 ## 7. Assumptions and dependencies
 
 - A Home Assistant instance is available and provides entity state updates.
-- Each configured room has exactly one primary `climate` entity.
+- Each configured regulation profile has exactly one primary `climate` entity.
+- Each regulation profile inherits or validates exactly one Home Assistant area
+  association from its primary `climate` entity or device context.
 - Presence is derived only from explicitly configured `person` entities.
 - Open-window behavior is limited to actions that can be expressed through
   generic climate capabilities.
@@ -117,12 +125,12 @@ evaluation logic.
 ## 8. Business rules and prioritization
 
 The following rule priority is currently established and shall govern effective
-room state resolution:
+area state resolution:
 
 1. Window override
-2. Manual room override
+2. Manual area override
 3. Effective global mode
-4. Room schedule
+4. Area schedule
 5. Fallback state
 
 ## 9. Functional requirements
@@ -149,93 +157,117 @@ room state resolution:
   value `ClimateRelayCore`.
 - Status: Confirmed by implementation
 
-### 9.2 Room model
+### 9.2 Regulation profile model
 
-#### FR-010 Room composition
+#### FR-010 Area-bound regulation composition
 
-- Statement: The system shall model climate behavior per room.
+- Statement: The system shall model climate behavior through regulation
+  profiles that integrate with Home Assistant areas while remaining anchored to
+  primary Home Assistant `climate` entities.
 - Source: Discovery and product goals
-- Rationale: The product is intentionally room-centric.
-- Fit criterion: Backend configuration and rule evaluation operate on rooms
-  rather than directly on unrelated entity lists.
+- Rationale: The product is intentionally area-centric but should reuse Home
+  Assistant's existing house model instead of inventing a parallel room tree.
+- Fit criterion: Backend configuration and rule evaluation operate on
+  regulation profiles anchored to one primary `climate` entity and associated
+  with the corresponding HA house structure rather than on free-standing
+  proprietary room identities or unrelated entity lists.
 - Status: Confirmed direction
 
 #### FR-011 Primary climate entity
 
-- Statement: Each room shall reference exactly one primary Home Assistant
-  `climate` entity.
+- Statement: Each regulation profile shall reference exactly one primary Home
+  Assistant `climate` entity as its canonical identity anchor.
 - Source: Existing requirements baseline
-- Rationale: A room requires one authoritative actuator target.
-- Fit criterion: Room configuration is invalid unless exactly one primary
-  `climate` entity is assigned.
+- Rationale: Each regulation profile requires one authoritative actuator target
+  and one stable HA-native control anchor.
+- Fit criterion: Regulation-profile configuration is invalid unless exactly one
+  primary `climate` entity is assigned.
+- Status: Confirmed direction
+
+#### FR-010A Derived area association
+
+- Statement: Each regulation profile shall resolve to exactly one Home
+  Assistant area through its primary `climate` entity or the underlying device
+  context used by Home Assistant.
+- Source: Architecture refinement on 2026-04-22
+- Rationale: ClimateRelayCore must reuse Home Assistant's house structure for
+  navigation instead of creating a second room tree, but the regulation profile
+  itself should stay anchored to the real controlled `climate` source.
+- Fit criterion: Configuration is invalid unless the primary `climate` entity
+  can be mapped to one Home Assistant area, and persisted/runtime state
+  identifies the profile by the primary `climate` anchor rather than by a free
+  user-defined room key.
 - Status: Confirmed direction
 
 #### FR-012 Optional humidity sensor
 
-- Statement: Each room may reference one humidity sensor.
+- Statement: Each regulation profile may reference one humidity sensor.
 - Source: Discovery and product goals
-- Rationale: Humidity is optional supporting room context.
-- Fit criterion: A room remains valid with or without a configured humidity
-  sensor.
+- Rationale: Humidity is optional supporting area context.
+- Fit criterion: A regulation profile remains valid with or without a
+  configured humidity sensor.
 - Status: Confirmed direction
 
 #### FR-019 Humidity as optional display context
 
-- Statement: If a room has a configured humidity sensor, the humidity value
+- Statement: If a regulation profile has a configured humidity sensor, the
+  humidity value
   shall be treated as optional display and hint context and shall not affect the
   control rule evaluation.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: Humidity can add useful room context without increasing the
+- Rationale: Humidity can add useful area context without increasing the
   complexity or unpredictability of the climate control logic.
-- Fit criterion: The system can expose humidity values for room display, while
+- Fit criterion: The system can expose humidity values for area display, while
   rule evaluation remains unchanged whether the humidity sensor is configured or
   not.
 - Status: Confirmed direction
 
 #### FR-013 Optional window contact
 
-- Statement: Each room may reference one window contact.
+- Statement: Each regulation profile may reference one window contact.
 - Source: Discovery and product goals
-- Rationale: Open-window automation is optional per room.
-- Fit criterion: A room remains valid with or without a configured window
-  contact.
+- Rationale: Open-window automation is optional per area.
+- Fit criterion: A regulation profile remains valid with or without a
+  configured window contact.
 - Status: Confirmed direction
 
 #### FR-020 Optional sensor degradation
 
-- Statement: If an optional room sensor becomes unavailable, the system shall
-  continue operating the room as far as possible without that sensor input.
+- Statement: If an optional area sensor becomes unavailable, the system shall
+  continue operating the regulation profile as far as possible without that
+  sensor input.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: Optional context loss should not unnecessarily block core room
+- Rationale: Optional context loss should not unnecessarily block core area
   control.
 - Fit criterion: Loss of an optional humidity sensor or optional window contact
-  does not prevent continued room control based on the remaining valid inputs.
+  does not prevent continued area control based on the remaining valid inputs.
 - Status: Confirmed direction
 
 #### FR-021 Optional sensor availability indication
 
-- Statement: If an optional room sensor becomes unavailable, the system shall
+- Statement: If an optional area sensor becomes unavailable, the system shall
   expose this condition so that the frontend can show a user-visible warning or
   indication.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Users should be aware that optional context is currently missing.
-- Fit criterion: Optional sensor unavailability is available as room state or
+- Fit criterion: Optional sensor unavailability is available as area state or
   status information for UI visualization.
 - Status: Confirmed direction
 
-#### FR-014 Room-specific targets
+#### FR-014 Area-specific targets
 
-- Statement: Each room shall support separate `home` and `away` target
+- Statement: Each regulation profile shall support separate `home` and `away`
+  target
   definitions.
 - Source: Existing requirements baseline
-- Rationale: Presence-aware automation requires room-specific occupancy targets.
-- Fit criterion: For each room, configuration supports distinct target values
-  for `home` and `away`.
+- Rationale: Presence-aware automation requires area-specific occupancy targets.
+- Fit criterion: For each regulation profile, configuration supports distinct
+  target values for `home` and `away`.
 - Status: Confirmed direction
 
-#### FR-017 Room target structure
+#### FR-017 Area target structure
 
-- Statement: A room target shall be temperature-based and shall support at
+- Statement: An area target shall be temperature-based and shall support at
   least an absolute target temperature and may additionally support relative
   temperature adjustment.
 - Source: Requirements elicitation on 2026-04-20
@@ -247,42 +279,44 @@ room state resolution:
 
 #### FR-072 Relative target reference
 
-- Statement: If a room target uses relative temperature adjustment, the
-  adjustment shall be applied relative to the room's currently valid target
+- Statement: If an area target uses relative temperature adjustment, the
+  adjustment shall be applied relative to the area's currently valid target
   temperature at the time of evaluation.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: Relative targets should adapt from the room's current intended
+- Rationale: Relative targets should adapt from the area's current intended
   state instead of requiring a separate static reference model.
-- Fit criterion: A relative room target is resolved by adding its temperature
-  delta to the room's currently applicable target temperature.
+- Fit criterion: A relative area target is resolved by adding its temperature
+  delta to the area's currently applicable target temperature.
 - Status: Confirmed direction
 
 #### FR-018 Away target variants
 
-- Statement: A room's `away` target shall support both a fully explicit target
+- Statement: A regulation profile's `away` target shall support both a fully
+  explicit target
   state and temperature adjustment relative to another baseline target.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Away behavior must be configurable either as a fixed setpoint or
-  as a setback/boost relative to normal room behavior.
+  as a setback/boost relative to normal area behavior.
 - Fit criterion: `away` configuration supports both absolute and relative
   target definition forms.
 - Status: Confirmed direction
 
-#### FR-015 Room schedule
+#### FR-015 Area schedule
 
-- Statement: Each room shall support a configurable schedule.
+- Statement: Each regulation profile shall support a configurable schedule.
 - Source: Existing requirements baseline
-- Rationale: Automated target changes must be time-based at room level.
-- Fit criterion: Each configured room can store and evaluate a schedule.
+- Rationale: Automated target changes must be time-based at area level.
+- Fit criterion: Each configured regulation profile can store and evaluate a
+  schedule.
 - Status: Confirmed direction
 
 #### FR-016 Manual override policy
 
-- Statement: Each room shall support configurable manual override termination
+- Statement: Each regulation profile shall support configurable manual override termination
   behavior.
 - Source: Existing requirements baseline
 - Rationale: Users need predictable handling after manual intervention.
-- Fit criterion: Room configuration supports the allowed override termination
+- Fit criterion: Regulation-profile configuration supports the allowed override termination
   policies defined in this specification.
 - Status: Confirmed direction
 
@@ -398,7 +432,8 @@ room state resolution:
 
 #### FR-030 Delayed window activation
 
-- Statement: If a room has a configured window contact, the system shall start a
+- Statement: If an area-bound regulation profile has a configured window
+  contact, the system shall start a
   configurable delay when the contact opens and shall activate window override
   only if the contact remains open for the full delay.
 - Source: Rules document and requirements baseline
@@ -473,67 +508,67 @@ room state resolution:
   `heat` target with the device minimum temperature.
 - Status: Confirmed by implementation for current action mapping
 
-#### FR-037 Re-evaluate room state after window close
+#### FR-037 Re-evaluate area state after window close
 
 - Statement: When an active window override ends because the window closes, the
-  system shall trigger a full reevaluation of the room state using the rules
+  system shall trigger a full reevaluation of the area state using the rules
   that are valid at close time.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: The room should return to the currently correct state rather than
+- Rationale: The area should return to the currently correct state rather than
   an outdated pre-window snapshot.
-- Fit criterion: After window close, the resolved room target matches the
+- Fit criterion: After window close, the resolved area target matches the
   result of normal rule evaluation at that time.
 - Status: Confirmed direction
 
 Examples:
 
-- Given a room with an active window override and a scheduled target of 21 C,
+- Given an area with an active window override and a scheduled target of 21 C,
   when the schedule changes to 18 C while the window remains open and the
-  window is then closed, then the resolved room target is 18 C.
-- Given a room with an active window override while global mode is effectively
+  window is then closed, then the resolved area target is 18 C.
+- Given an area with an active window override while global mode is effectively
   `home`, when the global mode changes so that the effective state at close time
-  is `away` and the window is then closed, then the resolved room target is the
-  room's `away` target.
-- Given a room with an active window override and no active manual override,
+  is `away` and the window is then closed, then the resolved area target is the
+  profile's `away` target.
+- Given an area with an active window override and no active manual override,
   when a manual override to 23 C for 2 hours is created while the window
-  remains open and the window is then closed, then the resolved room target is
+  remains open and the window is then closed, then the resolved area target is
   the manual override target.
 
-### 9.5 Manual room overrides
+### 9.5 Manual area overrides
 
-#### FR-040 Manual room override support
+#### FR-040 Manual area override support
 
-- Statement: The system shall allow manual override of a room's effective target
+- Statement: The system shall allow manual override of an area's effective target
   through backend-owned interactions such as integration actions or future UI
   actions.
 - Source: Rules document
-- Rationale: Users need explicit room-level intervention independent of
+- Rationale: Users need explicit area-level intervention independent of
   schedules.
-- Fit criterion: The backend exposes a way to set a room-specific override
+- Fit criterion: The backend exposes a way to set an area-specific override
   target.
 - Status: Confirmed direction
 
-#### FR-070 Room-scoped override operations
+#### FR-070 Area-scoped override operations
 
 - Statement: Backend operations for creating, changing, or clearing manual
-  overrides shall be scoped to one room at a time.
+  overrides shall be scoped to one area at a time.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: The domain model is room-centric, and room-level operations remain
+- Rationale: The domain model is area-centric, and area-level operations remain
   clear, composable, and easier to reason about than special bulk semantics.
 - Fit criterion: The backend interface supports manual override operations per
-  room rather than requiring dedicated multi-room domain commands.
+  area rather than requiring dedicated multi-area domain commands.
 - Status: Confirmed direction
 
 #### FR-073 Minimal runtime command set
 
 - Statement: The backend shall provide a minimal runtime command set that
-  supports changing global mode, setting a room-specific manual override, and
-  clearing a room-specific manual override.
+  supports changing global mode, setting an area-specific manual override, and
+  clearing an area-specific manual override.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: These commands cover the currently identified runtime control needs
   without exposing unnecessary domain operations.
 - Fit criterion: The runtime interface supports commands equivalent to
-  `set_global_mode`, `set_room_override`, and `clear_room_override`.
+  `set_global_mode`, `set_area_override`, and `clear_area_override`.
 - Status: Confirmed direction
 
 #### FR-091 Global mode action schema
@@ -549,36 +584,36 @@ Examples:
 
 #### FR-071 UI-orchestrated batch actions
 
-- Statement: Convenience actions affecting multiple rooms may be implemented by
-  the frontend as orchestration of multiple room-scoped backend operations and
+- Statement: Convenience actions affecting multiple areas may be implemented by
+  the frontend as orchestration of multiple area-scoped backend operations and
   shall not require separate domain-specific backend batch functions.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Batch behaviors such as clearing all overrides or applying the same
-  temporary action to many rooms are interaction conveniences rather than core
+  temporary action to many areas are interaction conveniences rather than core
   domain concepts.
-- Fit criterion: The backend remains centered on room-scoped operations, while
-  the frontend can compose multiple calls for multi-room actions.
+- Fit criterion: The backend remains centered on area-scoped operations, while
+  the frontend can compose multiple calls for multi-area actions.
 - Status: Confirmed direction
 
 #### FR-045 Manual override input model
 
-- Statement: A manual room override shall be created by setting an absolute
-  target temperature for the room.
+- Statement: A manual area override shall be created by setting an absolute
+  target temperature for the area.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: Manual room interaction should remain simple and directly reflect a
-  user changing the room temperature.
+- Rationale: Manual area interaction should remain simple and directly reflect a
+  user changing the area temperature.
 - Fit criterion: Manual override creation accepts an absolute target
   temperature, not a relative delta, HVAC mode, or preset mode.
 - Status: Confirmed direction
 
-#### FR-092 Room override action schema
+#### FR-092 Area override action schema
 
-- Statement: The runtime command for setting a room override shall accept a room
+- Statement: The runtime command for setting an area override shall accept an area
   identifier, an absolute target temperature, and one termination definition.
 - Source: Requirements engineering refinement on 2026-04-20
-- Rationale: The action schema should capture the full room-level manual intent
+- Rationale: The action schema should capture the full area-level manual intent
   in one bounded command.
-- Fit criterion: The action equivalent to `set_room_override` requires a room
+- Fit criterion: The action equivalent to `set_area_override` requires an area
   reference, a target temperature, and a termination specification compatible
   with the allowed override termination options.
 - Status: Confirmed direction
@@ -597,30 +632,30 @@ Examples:
 
 #### FR-094 Clear override action schema
 
-- Statement: The runtime command for clearing a room override shall accept only
-  the room identifier needed to select the room whose manual override is to be
+- Statement: The runtime command for clearing an area override shall accept
+  only the area identifier needed to select the area whose manual override is to be
   cleared.
 - Source: Requirements engineering refinement on 2026-04-20
-- Rationale: Clearing an override should be an unambiguous room-scoped action
+- Rationale: Clearing an override should be an unambiguous area-scoped action
   with no additional behavioral options in the baseline.
-- Fit criterion: The action equivalent to `clear_room_override` requires a room
-  reference and no override-specific payload beyond room selection.
+- Fit criterion: The action equivalent to `clear_area_override` requires an
+  area reference and no override-specific payload beyond area selection.
 - Status: Confirmed direction
 
-#### FR-074 Replacing an active room override
+#### FR-074 Replacing an active area override
 
-- Statement: If a room already has an active manual override, creating a new
-  manual override for the same room shall replace the existing override.
+- Statement: If an area already has an active manual override, creating a new
+  manual override for the same area shall replace the existing override.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: Room-level manual interaction should remain direct and should not
+- Rationale: Area-level manual interaction should remain direct and should not
   require a separate explicit clear step before applying a new intent.
-- Fit criterion: A second `set_room_override` operation for the same room leaves
+- Fit criterion: A second `set_area_override` operation for the same area leaves
   exactly one active override, representing the newer command.
 - Status: Confirmed direction
 
 #### FR-041 Override termination options
 
-- Statement: The system shall support the manual room override termination
+- Statement: The system shall support the manual area override termination
   options `duration`, `until_time`, `next_timeblock`, and `never`.
 - Source: Rules document, requirements baseline, and elicitation on 2026-04-20
 - Rationale: Users need predictable override lifetimes.
@@ -677,7 +712,7 @@ Examples:
 #### FR-043 Next-timeblock termination
 
 - Statement: If the override termination option is `next_timeblock`, the system
-  shall end the override at the next schedule time block boundary for the room.
+  shall end the override at the next schedule time block boundary for the area.
 - Source: Rules document
 - Rationale: Users may want manual intervention only until the next planned
   schedule change.
@@ -690,7 +725,7 @@ Examples:
 - Statement: If the override termination option is `never`, the system shall
   keep the override active until it is explicitly cleared.
 - Source: Rules document
-- Rationale: Some rooms require user-controlled persistent exceptions.
+- Rationale: Some areas require user-controlled persistent exceptions.
 - Fit criterion: The override remains active across normal schedule transitions
   until explicit removal.
 - Status: Confirmed direction
@@ -698,13 +733,13 @@ Examples:
 #### FR-048 Optional global reset time for manual overrides
 
 - Statement: The system shall support an optional configuration that resets all
-  active manual room overrides to the current schedule at a specified clock
+  active manual area overrides to the current schedule at a specified clock
   time.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Some users want a daily automatic return from ad hoc manual changes
-  to normal scheduled behavior across all rooms.
+  to normal scheduled behavior across all areas.
 - Fit criterion: When the option is enabled, all active manual overrides are
-  cleared at the configured time and rooms return to the schedule-derived state.
+  cleared at the configured time and areas return to the schedule-derived state.
 - Status: Confirmed direction
 
 #### FR-049 Global reset option disabled by default
@@ -775,13 +810,14 @@ Examples:
   code execution.
 - Status: Confirmed direction
 
-#### FR-052 Schedule as room input
+#### FR-052 Schedule as area input
 
-- Statement: A room's schedule shall participate in effective target resolution
-  only after window override, manual room override, and effective global mode
+- Statement: An area's schedule shall participate in effective target
+  resolution only after window override, manual area override, and effective
+  global mode
   have been considered.
 - Source: Rules priority model
-- Rationale: The priority model must be consistent across all room decisions.
+- Rationale: The priority model must be consistent across all area decisions.
 - Fit criterion: Rule evaluation never applies the schedule when a higher
   priority context is active.
 - Status: Confirmed direction
@@ -791,32 +827,32 @@ Examples:
 #### FR-055 Exceptional fallback state
 
 - Statement: The system shall define a fallback target for exceptional cases in
-  which normal rule evaluation cannot produce a valid room target.
+  which normal rule evaluation cannot produce a valid area target.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Even if such situations should not occur in normal operation, the
   backend requires deterministic behavior for invalid or incomplete runtime
   states.
 - Fit criterion: The specification defines one deterministic fallback result for
-  rooms without a valid resolved target.
+  areas without a valid resolved target.
 - Status: Confirmed direction
 
 #### FR-056 Fallback target priority
 
-- Statement: If normal rule evaluation cannot produce a valid room target, the
-  system shall first reuse the last valid temperature-based room target known
-  for the room. If no such target is known, the system shall use a default
+- Statement: If normal rule evaluation cannot produce a valid area target, the
+  system shall first reuse the last valid temperature-based area target known
+  for the profile. If no such target is known, the system shall use a default
   fallback target of 20 C.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Reusing the last valid target preserves continuity, while a fixed
   default provides deterministic recovery when no prior valid state exists.
 - Fit criterion: In fallback situations, the resolved target is either the last
-  valid room target or 20 C when no last valid target is available.
+  valid area target or 20 C when no last valid target is available.
 - Status: Confirmed direction
 
 #### FR-068 Global fallback target for required device failure
 
 - Statement: The system shall support a globally configurable fallback target
-  temperature that is used when a required room control component becomes
+  temperature that is used when a required area control component becomes
   unavailable.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Failure of a required actuator or required control input needs a
@@ -827,14 +863,14 @@ Examples:
 
 #### FR-069 Required-component failure handling
 
-- Statement: If a required room control component becomes unavailable, the
-  system shall treat the room as being in fallback handling and use the global
+- Statement: If a required area control component becomes unavailable, the
+  system shall treat the area as being in fallback handling and use the global
   fallback target temperature.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Required component loss prevents normal rule evaluation and should
   trigger a defined fallback behavior instead of silent undefined operation.
 - Fit criterion: When a required climate entity or another required control
-  component is unavailable, the room resolves to the configured global fallback
+  component is unavailable, the area resolves to the configured global fallback
   target temperature.
 - Status: Confirmed direction
 
@@ -847,7 +883,7 @@ Examples:
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Configuration must remain stable across restarts and must not
   require manual reconstruction.
-- Fit criterion: After restart, configured rooms, schedules, targets, window
+- Fit criterion: After restart, configured areas, schedules, targets, window
   behavior settings, and mode-related configuration remain available without
   re-entry.
 - Status: Confirmed direction
@@ -861,26 +897,26 @@ Examples:
   assumptions may be stale or wrong.
 - Fit criterion: After startup, rule evaluation uses freshly read entity states
   for climate devices, window contacts, presence entities, and other configured
-  room inputs.
+  area inputs.
 - Status: Confirmed direction
 
-#### FR-059 Recompute effective room state after restart
+#### FR-059 Recompute effective area state after restart
 
 - Statement: After persisted configuration and current entity states have been
-  loaded, the system shall recompute the effective state of each room according
+  loaded, the system shall recompute the effective state of each configured area according
   to the normal rule model instead of blindly resuming a pre-restart runtime
   action sequence.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Correct post-restart behavior depends on current facts, not on an
   outdated runtime snapshot.
-- Fit criterion: Room targets after restart match the result of normal rule
+- Fit criterion: Area targets after restart match the result of normal rule
   evaluation based on loaded configuration and current entity states.
 - Status: Confirmed direction
 
 #### FR-063 Persist durable control state
 
 - Statement: The system shall persist durable control state needed for correct
-  post-restart rule evaluation, including at least global mode, room-specific
+  post-restart rule evaluation, including at least global mode, area-specific
   configuration, and any active manual override that has not yet expired.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Restart recovery requires more than static configuration when user
@@ -921,9 +957,9 @@ Examples:
   action responses or custom frontend-only APIs.
 - Source: Architecture decision based on Home Assistant developer guidance on
   entities and service action response usage, researched on 2026-04-20
-- Rationale: Room and global runtime state should remain reusable for
+- Rationale: Area and global runtime state should remain reusable for
   dashboards, automations, and other Home Assistant clients.
-- Fit criterion: Runtime values such as room state, current targets, warnings,
+- Fit criterion: Runtime values such as area state, current targets, warnings,
   and other stable status information are available as Home Assistant state.
 - Status: Confirmed direction
 
@@ -937,7 +973,7 @@ Examples:
   actions, which also makes them available to automations and other Home
   Assistant tooling.
 - Fit criterion: Commands equivalent to `set_global_mode`,
-  `set_room_override`, and `clear_room_override` are callable as integration
+  `set_area_override`, and `clear_area_override` are callable as integration
   actions.
 - Status: Confirmed direction
 
@@ -1009,13 +1045,13 @@ Examples:
 #### FR-078 Strategy shall not own business logic
 
 - Statement: A custom dashboard or view strategy shall generate configuration
-  only and shall not become the owner of room control rules or state
+  only and shall not become the owner of area control rules or state
   derivation.
 - Source: Requirements engineering decision derived from the backend-first
   architecture and Home Assistant strategy model, researched on 2026-04-20
 - Rationale: Strategies are for generating dashboard configuration, while rule
   evaluation belongs in the backend.
-- Fit criterion: Room targets, override resolution, schedule evaluation, and
+- Fit criterion: Area targets, override resolution, schedule evaluation, and
   fallback logic remain backend-owned even when a custom strategy is used.
 - Status: Confirmed direction
 
@@ -1023,19 +1059,32 @@ Examples:
 
 - Statement: The custom frontend shall read runtime state through Home
   Assistant's state context and subscriptions instead of using a separate
-  frontend-specific backend protocol for ordinary room status.
+  frontend-specific backend protocol for ordinary area status.
 - Source: Architecture decision based on Home Assistant custom card developer
   guidance, researched on 2026-04-20
 - Rationale: Reading the Home Assistant state directly aligns the frontend with
   native platform behavior and avoids redundant transport layers.
-- Fit criterion: The frontend obtains ordinary runtime room and global state
+- Fit criterion: The frontend obtains ordinary runtime area and global state
   through Home Assistant state access patterns.
+- Status: Confirmed direction
+
+#### FR-079A Frontend reuses Home Assistant house structure
+
+- Statement: The custom frontend shall use Home Assistant areas and floors as
+  the canonical house-navigation structure instead of maintaining a separate
+  proprietary room hierarchy.
+- Source: Architecture refinement on 2026-04-22
+- Rationale: Users should not have to maintain a parallel digital twin of
+  their home when Home Assistant already models the house structure.
+- Fit criterion: Frontend overview and detail navigation derive from HA
+  area/floor data, while ClimateRelayCore contributes only regulation-specific
+  state for configured areas.
 - Status: Confirmed direction
 
 #### FR-080 Minimal externally exposed entity set
 
 - Statement: The integration shall expose only the Home Assistant entities that
-  are necessary to support the intended room-centric control, visualization, and
+  are necessary to support the intended area-centric control, visualization, and
   automation use cases.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: Exposing too many entities increases maintenance cost, UI noise,
@@ -1044,17 +1093,18 @@ Examples:
   purpose for control, visualization, warning, or automation.
 - Status: Confirmed direction
 
-#### FR-081 Room-level climate entity as primary room surface
+#### FR-081 Area-level climate entity as primary area surface
 
-- Statement: Each configured room shall be exposed primarily through one
-  integration-owned room-level `climate` entity.
+- Statement: Each configured area-bound regulation profile shall be exposed
+  primarily through one integration-owned area-level `climate` entity.
 - Source: Architecture decision based on Home Assistant climate entity model,
   researched on 2026-04-20
-- Rationale: The room behaves from the user perspective like a temperature
+- Rationale: The configured area behaves from the user perspective like a temperature
   control endpoint, and the `climate` domain is the closest Home Assistant
   native fit for that responsibility.
-- Fit criterion: Each room has one integration-owned `climate` entity that
-  represents its room-level control state and target temperature behavior.
+- Fit criterion: Each configured area has one integration-owned `climate`
+  entity that represents its area-level control state and target temperature
+  behavior.
 - Status: Confirmed direction
 
 #### FR-082 Global mode as select entity
@@ -1073,7 +1123,7 @@ Examples:
 
 #### FR-083 Avoid mirroring optional context sensors by default
 
-- Statement: Optional room context such as humidity and window state shall not
+- Statement: Optional area context such as humidity and window state shall not
   be duplicated into additional integration-owned entities by default when the
   frontend can use the configured source entities directly.
 - Source: Architecture decision derived from the minimal entity exposure
@@ -1084,27 +1134,27 @@ Examples:
   humidity or window entities solely for frontend convenience.
 - Status: Confirmed direction
 
-#### FR-084 Use attributes sparingly for explanatory room context
+#### FR-084 Use attributes sparingly for explanatory area context
 
-- Statement: Additional integration-owned room context that explains the state
-  of the room-level `climate` entity may be exposed as extra state attributes,
+- Statement: Additional integration-owned area context that explains the state
+  of the area-level `climate` entity may be exposed as extra state attributes,
   but only when that context is necessary for frontend explanation or
   automation and does not justify a separate entity.
 - Source: Architecture decision based on Home Assistant entity guidance on extra
   state attributes, researched on 2026-04-20
 - Rationale: Home Assistant allows explanatory extra attributes, but excessive
   or rapidly changing attributes should be avoided.
-- Fit criterion: Extra room attributes are limited to explanatory context and
+- Fit criterion: Extra area attributes are limited to explanatory context and
   are not used as a dumping ground for every internal intermediate value.
 - Status: Confirmed direction
 
-#### FR-085 Minimal explanatory room attributes
+#### FR-085 Minimal explanatory area attributes
 
-- Statement: If explanatory room context is exposed as extra attributes of the
-  room-level `climate` entity, the baseline attribute set shall be limited to
-  the minimum needed to explain current room behavior and upcoming changes.
+- Statement: If explanatory area context is exposed as extra attributes of the
+  area-level `climate` entity, the baseline attribute set shall be limited to
+  the minimum needed to explain current area behavior and upcoming changes.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: The room entity should remain understandable and stable without
+- Rationale: The area entity should remain understandable and stable without
   exposing all internal rule-engine details.
 - Fit criterion: The baseline attribute set is intentionally small and focused
   on user-relevant explanation.
@@ -1112,22 +1162,22 @@ Examples:
 
 #### FR-086 Active control context attribute
 
-- Statement: The room-level `climate` entity shall expose the currently active
+- Statement: The area-level `climate` entity shall expose the currently active
   control context as an explanatory extra state attribute.
 - Source: Architecture decision derived from the minimal entity exposure
   principle and Home Assistant entity guidance, researched and refined on
   2026-04-20
-- Rationale: The active control context explains why the room currently has its
+- Rationale: The active control context explains why the area currently has its
   resolved target without requiring a separate entity or frontend-specific
   derivation.
-- Fit criterion: The room-level `climate` entity exposes an attribute
+- Fit criterion: The area-level `climate` entity exposes an attribute
   equivalent to `active_control_context`.
 - Status: Confirmed direction
 
 #### FR-087 Active control context values
 
 - Statement: The `active_control_context` attribute shall use a bounded set of
-  values that reflects the rule source currently determining the room target.
+  values that reflects the rule source currently determining the area target.
 - Source: Requirements elicitation on 2026-04-20
 - Rationale: A small fixed vocabulary is easier for UI rendering, automation,
   and long-term interface stability than free-form text.
@@ -1137,14 +1187,14 @@ Examples:
 
 #### FR-088 Next change timestamp attribute
 
-- Statement: The room-level `climate` entity shall expose the next scheduled or
-  rule-driven room target change time as an explanatory extra state attribute
+- Statement: The area-level `climate` entity shall expose the next scheduled or
+  rule-driven area target change time as an explanatory extra state attribute
   when such a future change is known.
-- Source: Architecture decision derived from the agreed room UI needs and the
+- Source: Architecture decision derived from the agreed area UI needs and the
   minimal attribute model, refined on 2026-04-20
-- Rationale: Showing the next expected change is directly useful in the room UI
+- Rationale: Showing the next expected change is directly useful in the area UI
   and explains how long the current target is expected to remain active.
-- Fit criterion: The room-level `climate` entity exposes an attribute
+- Fit criterion: The area-level `climate` entity exposes an attribute
   equivalent to `next_change_at` whenever the next relevant change time is known.
 - Status: Confirmed direction
 
@@ -1174,29 +1224,29 @@ Examples:
 #### FR-089 Override end timestamp attribute
 
 - Statement: If a manual override is active and has a known end time, the
-  room-level `climate` entity shall expose that end time as an explanatory extra
+  area-level `climate` entity shall expose that end time as an explanatory extra
   state attribute.
-- Source: Architecture decision derived from the agreed room UI needs and the
+- Source: Architecture decision derived from the agreed area UI needs and the
   minimal attribute model, refined on 2026-04-20
 - Rationale: Users need to see when a temporary override will stop without the
   frontend having to reconstruct the end condition.
-- Fit criterion: The room-level `climate` entity exposes an attribute
+- Fit criterion: The area-level `climate` entity exposes an attribute
   equivalent to `override_ends_at` only when an override is active and a
   concrete end time exists.
 - Status: Confirmed direction
 
 #### FR-090 Degradation status attribute
 
-- Statement: The room-level `climate` entity shall expose a compact degradation
+- Statement: The area-level `climate` entity shall expose a compact degradation
   or warning status as an explanatory extra state attribute when optional sensor
-  loss or required-component fallback affects room operation.
+  loss or required-component fallback affects area operation.
 - Source: Architecture decision derived from the agreed failure-handling model
   and the minimal attribute model, refined on 2026-04-20
 - Rationale: The frontend should be able to highlight degraded operation
   without requiring many dedicated warning entities.
-- Fit criterion: The room-level `climate` entity exposes an attribute
+- Fit criterion: The area-level `climate` entity exposes an attribute
   equivalent to `degradation_status` when degraded or fallback operation is
-  relevant to the room.
+  relevant to the area.
 - Status: Confirmed direction
 
 #### FR-097 Degradation status vocabulary
@@ -1235,7 +1285,7 @@ Examples:
 
 #### FR-062 Future frontend capabilities
 
-- Statement: The future frontend shall support room overview, room detail
+- Statement: The future frontend shall support area overview, area detail
   dialogs, schedule editing, and global mode controls by consuming
   backend-owned interfaces.
 - Source: Architecture
@@ -1250,10 +1300,10 @@ Examples:
   prominent ventilation recommendations, colors, or pictograms, but such hints
   shall not change backend control behavior.
 - Source: Requirements elicitation on 2026-04-20
-- Rationale: UI hints can help users interpret room conditions without coupling
+- Rationale: UI hints can help users interpret area conditions without coupling
   humidity display to automatic climate control decisions.
 - Fit criterion: Any humidity-based frontend hint remains informational and does
-  not modify room targets, overrides, or window logic.
+  not modify area targets, overrides, or window logic.
 - Status: Confirmed direction
 
 ## 10. Quality requirements and constraints
@@ -1308,22 +1358,23 @@ Examples:
 
 #### QR-020 Bounded rule evaluation latency
 
-- Statement: Pure rule evaluation for a single room shall complete quickly
+- Statement: Pure rule evaluation for a single regulation profile shall
+  complete quickly
   enough that user-triggered changes and ordinary state updates do not feel
   delayed.
 - Source: Requirements engineering refinement on 2026-04-20
 - Fit criterion: In automated tests on the supported development baseline,
-  single-room domain rule evaluation completes well below 100 ms.
+  single-profile domain rule evaluation completes well below 100 ms.
 - Status: Confirmed direction
 
-#### QR-021 Efficient room update scaling
+#### QR-021 Efficient regulation-profile update scaling
 
-- Statement: Room state updates shall scale linearly with the number of affected
-  rooms and shall not require full-system reevaluation when one unrelated room
-  changes.
+- Statement: Regulation-profile state updates shall scale linearly with the
+  number of affected profiles and shall not require full-system reevaluation
+  when one unrelated profile changes.
 - Source: Requirements engineering refinement on 2026-04-20
-- Fit criterion: Architecture and tests show that an event affecting one room
-  reevaluates only that room and any explicitly dependent global logic.
+- Fit criterion: Architecture and tests show that an event affecting one area
+  reevaluates only that area and any explicitly dependent global logic.
 - Status: Confirmed direction
 
 ### 10.4 Reliability and recoverability
@@ -1339,7 +1390,7 @@ Examples:
 
 #### QR-031 Restart-safe recomputation
 
-- Statement: After restart, the system shall recompute room state from
+- Statement: After restart, the system shall recompute area state from
   persisted configuration and current entity values without assuming that
   pre-restart timing information is still valid.
 - Source: Restart requirements baseline
@@ -1352,9 +1403,9 @@ Examples:
 #### QR-040 User-visible degraded-state indication
 
 - Statement: Degraded or fallback operation that affects user understanding
-  shall be visible through exposed room state suitable for UI indication.
+  shall be visible through exposed area state suitable for UI indication.
 - Source: Requirements elicitation on degraded sensor and component handling
-- Fit criterion: Room state exposes enough information for the frontend to
+- Fit criterion: Area state exposes enough information for the frontend to
   distinguish normal, degraded, and fallback operation.
 - Status: Confirmed direction
 
@@ -1374,12 +1425,23 @@ Examples:
 
 #### QR-050 Consistent user mental model
 
-- Statement: Configuration and runtime control shall preserve a room-centric
+- Statement: Configuration and runtime control shall preserve an area-centric
   user mental model and avoid exposing unnecessary internal rule-engine
   mechanics.
 - Source: Product vision and elicitation
-- Fit criterion: The primary runtime controls map directly to room temperature
+- Fit criterion: The primary runtime controls map directly to area temperature
   and global mode concepts rather than low-level device commands.
+- Status: Confirmed direction
+
+#### QR-050A No parallel house model
+
+- Statement: Configuration, persistence, and frontend navigation shall reuse
+  Home Assistant's existing area and floor structure rather than introducing a
+  second proprietary house model.
+- Source: Product-owner architecture review on 2026-04-22
+- Fit criterion: Users do not need to maintain a separate ClimateRelayCore room
+  tree to navigate the home; ClimateRelayCore stores only additional
+  area-specific regulation semantics anchored to real climate entities.
 - Status: Confirmed direction
 
 #### QR-051 Predictable time semantics
@@ -1469,7 +1531,7 @@ Verification expectations by requirement class:
 - Device-specific optimization for individual thermostat vendors
 - Final frontend interaction design and visual design system
 - Mobile app support outside Home Assistant frontend capabilities
-- Energy analytics, reporting, or optimization algorithms beyond rule-based room
+- Energy analytics, reporting, or optimization algorithms beyond rule-based area
   control
 - Automatic import of legacy automations from existing Home Assistant setups
 - Optional humidity-based dehumidifier control
@@ -1481,17 +1543,17 @@ but may become future epics after the core climate-control scope is stable.
 
 ### FC-001 Optional dehumidifier control
 
-The product may later support an optional room-level dehumidifier entity that is
+The product may later support an optional area-level dehumidifier entity that is
 switched on or off based on measured humidity, configurable thresholds, and
 hysteresis.
 
 Possible future requirement themes:
 
-- one optional dehumidifier actuator per room
+- one optional dehumidifier actuator per area
 - configurable humidity target or upper and lower thresholds
 - hysteresis to avoid rapid toggling
 - purely humidity-driven control that remains separate from heating control
-- clear room-level visibility of current dehumidifier state and thresholds
+- clear area-level visibility of current dehumidifier state and thresholds
 
 ## 12. Review results and remaining gaps
 
@@ -1515,12 +1577,12 @@ implementation planning. Remaining gaps are bounded and primarily technical:
 The following elicitation results are now considered part of the reviewed
 baseline:
 
-- Room targets are temperature-based only.
-- Relative targets are applied to the room's currently valid target
+- Area targets are temperature-based only.
+- Relative targets are applied to the area's currently valid target
   temperature.
 - `away` supports both absolute and relative target definition.
 - Window close triggers full reevaluation using rules valid at close time.
-- Manual overrides are room-scoped, absolute-temperature based, and replacing.
+- Manual overrides are area-scoped, absolute-temperature based, and replacing.
 - Override termination supports `duration`, `until_time`, `next_timeblock`, and
   `never`.
 - Schedule layouts are `Mo-So`, `Mo-Fr + Sa + So`, and individual daily
@@ -1529,9 +1591,9 @@ baseline:
 - Optional sensors degrade gracefully with UI-visible indication.
 - Required component failure uses a globally configurable fallback temperature.
 - Restart reloads persisted configuration, rereads live entity state, and
-  recomputes room state.
+  recomputes area state.
 - The frontend reads Home Assistant state and writes via integration actions.
-- The minimal exposed entity model is room-level `climate` plus global `select`
+- The minimal exposed entity model is area-level `climate` plus global `select`
   with sparse explanatory attributes.
 - Humidity is informational context only in the baseline.
 
@@ -1562,7 +1624,7 @@ document [verification-matrix.md](./verification-matrix.md).
   config flow, entity exposure, action registration and handling, restart
   recovery behavior, attribute exposure, degradation handling
 - `AT` priority:
-  room scenarios around schedule change, window close, override replacement,
+  area scenarios around schedule change, window close, override replacement,
   fallback behavior, and UI-visible explanatory context
 - `DR` priority:
   minimal entity surface, backend/frontend ownership boundary, Home Assistant
@@ -1581,7 +1643,7 @@ document [verification-matrix.md](./verification-matrix.md).
 
 1. Derive an implementation backlog grouped into backend domain, Home
    Assistant integration, and frontend work.
-2. Define the exact technical action schemas and room attribute serialization
+2. Define the exact technical action schemas and area attribute serialization
    formats.
 3. Create a verification matrix that maps each `FR` and `QR` identifier to
    planned `UT`, `IT`, `AT`, or `DR` activities.

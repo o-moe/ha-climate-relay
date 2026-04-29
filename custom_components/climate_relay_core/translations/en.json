@@ -43,11 +43,33 @@
         "data_description": {
           "manual_override_reset_time": "Required because daily override reset is enabled."
         }
+      },
+      "room": {
+        "title": "Regulation Profile",
+        "description": "Configure the first primary-climate-anchored control surface for Climate Relay.",
+        "data": {
+          "primary_climate_entity_id": "Primary climate entity",
+          "humidity_entity_id": "Humidity sensor",
+          "window_entity_id": "Window contact",
+          "home_target_temperature": "Home target temperature",
+          "away_target_type": "Away target type",
+          "away_target_temperature": "Away target value"
+        },
+        "data_description": {
+          "primary_climate_entity_id": "Required source climate entity. Its Home Assistant area is reused for Climate Relay placement.",
+          "humidity_entity_id": "Optional display-only humidity source.",
+          "window_entity_id": "Optional window-contact source for later area automation slices.",
+          "home_target_temperature": "Target temperature used when the effective presence is home.",
+          "away_target_type": "Choose whether the away target is absolute or relative to the home target.",
+          "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type."
+        }
       }
     },
     "error": {
       "person_entities_required": "Select at least one tracked presence entity.",
-      "reset_time_required": "This field is required when the daily override reset is enabled."
+      "reset_time_required": "This field is required when the daily override reset is enabled.",
+      "primary_climate_required": "Select exactly one primary climate entity.",
+      "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first."
     }
   },
   "selector": {
@@ -55,6 +77,12 @@
       "options": {
         "away": "Treat as away",
         "home": "Treat as home"
+      }
+    },
+    "away_target_type": {
+      "options": {
+        "absolute": "Absolute temperature",
+        "relative": "Relative delta"
       }
     }
   },

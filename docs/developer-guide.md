@@ -63,7 +63,10 @@ CI:
 - Published versions and test channels follow [release-policy.md](./release-policy.md).
 - The release version is taken from
   `custom_components/climate_relay_core/manifest.json`.
-- The release title iteration label is taken from `.github/release-plan.json`.
+- Stable versions are epic-scoped; iteration builds reuse that target version
+  with alpha and beta suffixes.
+- The release title epic and iteration labels are taken from
+  `.github/release-plan.json`.
 
 ## Release Readiness Checklist
 
@@ -122,6 +125,8 @@ that future increments should proactively guard against:
 - Discovery: [discovery.md](./discovery.md)
 - Requirements: [requirements.md](./requirements.md)
 - Verification Matrix: [verification-matrix.md](./verification-matrix.md)
+- HA automation strategy: [ha-automation-strategy.md](./ha-automation-strategy.md)
+- GUI smoke suites: [gui-smoke-suites/README.md](./gui-smoke-suites/README.md)
 - Implementation Plan: [implementation-plan.md](./implementation-plan.md)
 - Release Policy: [release-policy.md](./release-policy.md)
 - Rules: [rules.md](./rules.md)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from custom_components.climate_relay_core.const import (
     DEFAULT_FALLBACK_TEMPERATURE,
@@ -12,13 +12,18 @@ from custom_components.climate_relay_core.const import (
 )
 from custom_components.climate_relay_core.domain import EffectivePresence, GlobalMode
 from custom_components.climate_relay_core.runtime import (
+    AreaReference,
     GlobalConfig,
     GlobalRuntime,
     _normalize_bool,
+    _normalize_entity_id,
     _normalize_optional_value,
     _normalize_person_entity_ids,
     _normalize_unknown_state_handling,
+    _resolve_area_reference,
+    _resolve_profile_display_name,
     build_global_config,
+    build_room_configs,
 )
 
 
@@ -174,6 +179,10 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(_normalize_person_entity_ids(None), [])
         self.assertEqual(_normalize_person_entity_ids("person.alice"), ["person.alice"])
         self.assertEqual(
+            _normalize_person_entity_ids({"value": [{"value": "person.alice"}]}),
+            ["person.alice"],
+        )
+        self.assertEqual(
             _normalize_person_entity_ids({"entity_id": "person.alice"}),
             ["person.alice"],
         )
@@ -188,3 +197,221 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(_normalize_unknown_state_handling({"value": ""}), "away")
         self.assertEqual(_normalize_optional_value({"value": "wrapped"}), "wrapped")
         self.assertEqual(_normalize_optional_value("plain"), "plain")
+        self.assertTrue(_normalize_bool("maybe"))
+        self.assertEqual(
+            _normalize_entity_id({"entity_id": "climate.living_room"}, required=True),
+            "climate.living_room",
+        )
+        with self.assertRaisesRegex(ValueError, "Unsupported entity selector value"):
+            _normalize_entity_id(123, required=True)
+
+    async def test_build_room_configs_normalizes_single_room_payload(self) -> None:
+        (room_config,) = build_room_configs(
+            {},
+            {
+                "rooms": [
+                    {
+                        "primary_climate_entity_id": {"value": "climate.living_room"},
+                        "humidity_entity_id": {"value": "sensor.living_room_humidity"},
+                        "window_entity_id": {"value": "binary_sensor.living_room_window"},
+                        "home_target_temperature": 21.0,
+                        "away_target_type": {"value": "relative"},
+                        "away_target_temperature": -2.0,
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(room_config.display_name, "Living Room")
+        self.assertEqual(room_config.profile_id, "climate_living_room")
+        self.assertEqual(room_config.primary_climate_entity_id, "climate.living_room")
+        self.assertIsNone(room_config.area_id)
+        self.assertIsNone(room_config.area_name)
+        self.assertEqual(room_config.humidity_entity_id, "sensor.living_room_humidity")
+        self.assertEqual(room_config.window_entity_id, "binary_sensor.living_room_window")
+        self.assertEqual(room_config.home_target.temperature, 21.0)
+        self.assertEqual(room_config.away_target.mode, "relative")
+
+    async def test_build_room_configs_uses_default_target_type_and_optional_entities(self) -> None:
+        (room_config,) = build_room_configs(
+            {},
+            {
+                "rooms": [
+                    {
+                        "primary_climate_entity_id": "climate.office",
+                        "home_target_temperature": 20.0,
+                        "away_target_type": "unsupported",
+                        "away_target_temperature": 17.0,
+                    }
+                ]
+            },
+        )
+
+        self.assertIsNone(room_config.humidity_entity_id)
+        self.assertIsNone(room_config.window_entity_id)
+        self.assertEqual(room_config.away_target.mode, "absolute")
+
+    async def test_build_room_configs_derives_area_context_when_hass_is_available(self) -> None:
+        hass = Mock()
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            return_value=AreaReference(area_id="living_room", area_name="Living Room"),
+        ):
+            (room_config,) = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.living_room",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+                hass=hass,
+            )
+
+        self.assertEqual(room_config.area_id, "living_room")
+        self.assertEqual(room_config.area_name, "Living Room")
+        self.assertEqual(room_config.display_name, "Living Room")
+
+    async def test_resolve_area_reference_accepts_entity_registry_uuid(self) -> None:
+        hass = Mock()
+        entity_registry = Mock()
+        device_registry = Mock()
+        area_registry = Mock()
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_resolve_entity_id",
+                return_value="climate.living_room",
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dr.async_get",
+                return_value=device_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.ar.async_get",
+                return_value=area_registry,
+            ),
+        ):
+            entity_registry.async_get.return_value = SimpleNamespace(
+                area_id=None,
+                device_id="device-1",
+            )
+            device_registry.async_get.return_value = SimpleNamespace(area_id="device_area")
+            area_registry.async_get_area.return_value = SimpleNamespace(name="Device Area")
+
+            resolved = _resolve_area_reference(hass, "uuid-climate")
+
+        self.assertEqual(resolved.area_id, "device_area")
+        self.assertEqual(resolved.area_name, "Device Area")
+
+    async def test_resolve_profile_display_name_prefers_area_then_legacy_then_entity_name(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _resolve_profile_display_name(
+                "climate.living_room",
+                AreaReference(area_id="living_room", area_name="Living Room"),
+                legacy_name="Legacy",
+            ),
+            "Living Room",
+        )
+        self.assertEqual(
+            _resolve_profile_display_name(
+                "climate.living_room",
+                AreaReference(area_id=None, area_name=None),
+                legacy_name="Legacy",
+            ),
+            "Legacy",
+        )
+        self.assertEqual(
+            _resolve_profile_display_name(
+                "climate.guest_suite",
+                AreaReference(area_id=None, area_name=None),
+                legacy_name=None,
+            ),
+            "Guest Suite",
+        )
+
+    async def test_resolve_area_reference_prefers_entity_area_then_device_area(self) -> None:
+        hass = Mock()
+        entity_registry = Mock()
+        device_registry = Mock()
+        area_registry = Mock()
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_get",
+                return_value=entity_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.er.async_resolve_entity_id",
+                side_effect=lambda _registry, value: value,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dr.async_get",
+                return_value=device_registry,
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.ar.async_get",
+                return_value=area_registry,
+            ),
+        ):
+            entity_registry.async_get.return_value = SimpleNamespace(
+                area_id="entity_area",
+                device_id="device-1",
+            )
+            area_registry.async_get_area.return_value = SimpleNamespace(name="Entity Area")
+            resolved = _resolve_area_reference(hass, "climate.living_room")
+            self.assertEqual(resolved.area_id, "entity_area")
+            self.assertEqual(resolved.area_name, "Entity Area")
+
+            entity_registry.async_get.return_value = SimpleNamespace(
+                area_id=None,
+                device_id="device-2",
+            )
+            device_registry.async_get.return_value = SimpleNamespace(area_id="device_area")
+            area_registry.async_get_area.return_value = SimpleNamespace(name="Device Area")
+            resolved = _resolve_area_reference(hass, "climate.office")
+            self.assertEqual(resolved.area_id, "device_area")
+            self.assertEqual(resolved.area_name, "Device Area")
+
+            entity_registry.async_get.return_value = None
+            resolved = _resolve_area_reference(hass, "climate.unknown")
+            self.assertIsNone(resolved.area_id)
+            self.assertIsNone(resolved.area_name)
+
+            entity_registry.async_get.return_value = SimpleNamespace(
+                area_id=None,
+                device_id=None,
+            )
+            resolved = _resolve_area_reference(hass, "climate.no_area")
+            self.assertIsNone(resolved.area_id)
+            self.assertIsNone(resolved.area_name)
+
+    async def test_build_room_configs_rejects_invalid_required_entity_selector(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Required entity_id is missing"):
+            build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": None,
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+            )
+
+    async def test_build_room_configs_rejects_non_dict_room_payload(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported room configuration"):
+            build_room_configs({}, {"rooms": ["invalid"]})

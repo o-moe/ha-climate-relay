@@ -1,0 +1,209 @@
+"""Climate entity platform for Climate Relay regulation entities."""
+
+from __future__ import annotations
+
+from typing import Final
+
+from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
+
+from .const import (
+    ATTR_ACTIVE_CONTROL_CONTEXT,
+    ATTR_DEGRADATION_STATUS,
+    ATTR_HUMIDITY_ENTITY_ID,
+    ATTR_PRIMARY_CLIMATE_ENTITY_ID,
+    ATTR_WINDOW_ENTITY_ID,
+    DOMAIN,
+)
+from .domain import resolve_room_target
+from .runtime import GlobalRuntime, RegulationProfileConfig
+
+ATTR_TEMPERATURE: Final = "temperature"
+ATTR_CURRENT_TEMPERATURE: Final = "current_temperature"
+ATTR_HVAC_MODES: Final = "hvac_modes"
+DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE: Final = "optional_sensor_unavailable"
+DEGRADATION_REQUIRED_COMPONENT_FALLBACK: Final = "required_component_fallback"
+ACTIVE_CONTEXT_FALLBACK: Final = "fallback"
+ACTIVE_CONTEXT_SCHEDULE: Final = "schedule"
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up configured climate relay entities."""
+    stored_entry = hass.data[DOMAIN][entry.entry_id]
+    runtime: GlobalRuntime = stored_entry["runtime"]
+    room_configs: tuple[RegulationProfileConfig, ...] = stored_entry["room_configs"]
+    async_add_entities(
+        [
+            ClimateRelayCoreRoomClimateEntity(entry.entry_id, hass, runtime, room)
+            for room in room_configs
+        ]
+    )
+
+
+class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
+    """Primary-climate-anchored climate surface exposed by the integration."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        entry_id: str,
+        hass: HomeAssistant,
+        runtime: GlobalRuntime,
+        room_config: RegulationProfileConfig,
+    ) -> None:
+        self.hass = hass
+        self._runtime = runtime
+        self._room_config = room_config
+        self._attr_name = room_config.display_name
+        self._attr_unique_id = f"{entry_id}_profile_{room_config.profile_id}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"{entry_id}_{room_config.profile_id}")},
+            "name": room_config.display_name,
+        }
+        if room_config.area_name:
+            self._attr_device_info["suggested_area"] = room_config.area_name
+
+    async def async_added_to_hass(self) -> None:
+        """Register for upstream runtime and state changes."""
+        self.async_on_remove(self._runtime.subscribe(self._handle_runtime_update))
+        tracked_entities = [self._room_config.primary_climate_entity_id]
+        if self._room_config.humidity_entity_id:
+            tracked_entities.append(self._room_config.humidity_entity_id)
+        if self._room_config.window_entity_id:
+            tracked_entities.append(self._room_config.window_entity_id)
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass,
+                tracked_entities,
+                self._handle_source_state_change,
+            )
+        )
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        """Return the current HVAC mode."""
+        primary_state = self._primary_state
+        if primary_state is None:
+            return HVACMode.HEAT
+
+        state = str(primary_state.state)
+        try:
+            return HVACMode(state)
+        except ValueError:
+            return HVACMode.HEAT
+
+    @property
+    def hvac_modes(self) -> list[HVACMode]:
+        """Return supported HVAC modes."""
+        primary_state = self._primary_state
+        if primary_state is None:
+            return [HVACMode.HEAT]
+
+        modes = []
+        for value in primary_state.attributes.get(ATTR_HVAC_MODES, [HVACMode.HEAT]):
+            try:
+                modes.append(HVACMode(value))
+            except ValueError:
+                continue
+        return modes or [HVACMode.HEAT]
+
+    @property
+    def target_temperature(self) -> float:
+        """Return the resolved profile target temperature."""
+        if self._primary_state is None:
+            return self._runtime.config.fallback_temperature
+
+        return resolve_room_target(
+            self._runtime.effective_presence,
+            home_target=self._room_config.home_target,
+            away_target=self._room_config.away_target,
+        )
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Return the upstream current temperature when available."""
+        primary_state = self._primary_state
+        if primary_state is None:
+            return None
+        value = primary_state.attributes.get(ATTR_CURRENT_TEMPERATURE)
+        return float(value) if isinstance(value, int | float) else None
+
+    @property
+    def current_humidity(self) -> float | None:
+        """Return humidity from the optional source sensor."""
+        humidity_state = self._humidity_state
+        if humidity_state is None:
+            return None
+        try:
+            return float(humidity_state.state)
+        except TypeError, ValueError:
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose sparse explanatory profile context."""
+        attrs = {
+            ATTR_ACTIVE_CONTROL_CONTEXT: self._active_control_context,
+            ATTR_PRIMARY_CLIMATE_ENTITY_ID: self._room_config.primary_climate_entity_id,
+        }
+        if self._room_config.humidity_entity_id:
+            attrs[ATTR_HUMIDITY_ENTITY_ID] = self._room_config.humidity_entity_id
+        if self._room_config.window_entity_id:
+            attrs[ATTR_WINDOW_ENTITY_ID] = self._room_config.window_entity_id
+        if self._degradation_status is not None:
+            attrs[ATTR_DEGRADATION_STATUS] = self._degradation_status
+        return attrs
+
+    @property
+    def _primary_state(self):  # type: ignore[no-untyped-def]
+        return self.hass.states.get(self._room_config.primary_climate_entity_id)
+
+    @property
+    def _humidity_state(self):  # type: ignore[no-untyped-def]
+        if not self._room_config.humidity_entity_id:
+            return None
+        return self.hass.states.get(self._room_config.humidity_entity_id)
+
+    @property
+    def _window_state(self):  # type: ignore[no-untyped-def]
+        if not self._room_config.window_entity_id:
+            return None
+        return self.hass.states.get(self._room_config.window_entity_id)
+
+    @property
+    def _active_control_context(self) -> str:
+        if self._primary_state is None:
+            return ACTIVE_CONTEXT_FALLBACK
+        return ACTIVE_CONTEXT_SCHEDULE
+
+    @property
+    def _degradation_status(self) -> str | None:
+        if self._primary_state is None:
+            return DEGRADATION_REQUIRED_COMPONENT_FALLBACK
+        if _is_unavailable(self._humidity_state) or _is_unavailable(self._window_state):
+            return DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE
+        return None
+
+    @callback
+    def _handle_runtime_update(self) -> None:
+        self.async_write_ha_state()
+
+    @callback
+    def _handle_source_state_change(self, _event) -> None:  # type: ignore[no-untyped-def]
+        self.async_write_ha_state()
+
+
+def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
+    """Return whether an optional source state should be treated as unavailable."""
+    if state is None:
+        return False
+    return str(state.state) in {"unknown", "unavailable"}
