@@ -59,9 +59,7 @@ def _run_command(command: list[str], *, env: dict[str, str], description: str) -
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0 or "### Error" in result.stdout or "### Error" in result.stderr:
-        raise AcceptanceError(
-            f"{description} failed with exit code {result.returncode}."
-        )
+        raise AcceptanceError(f"{description} failed with exit code {result.returncode}.")
 
 
 def _playwright_env() -> dict[str, str]:

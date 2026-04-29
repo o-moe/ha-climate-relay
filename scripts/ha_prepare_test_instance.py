@@ -115,8 +115,7 @@ def _parse_install_versions(raw_values: list[str] | None) -> dict[str, str]:
         version = version.strip()
         if separator != "=" or not entity_id or not version:
             raise PrepareError(
-                f"Invalid --install-version value {raw_value!r}. "
-                "Expected ENTITY_ID=VERSION."
+                f"Invalid --install-version value {raw_value!r}. Expected ENTITY_ID=VERSION."
             )
         versions[entity_id] = version
     return versions
@@ -306,9 +305,7 @@ def _process_update_entity(
         timeout_seconds=update_timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
-    lines.append(
-        f"{entity_id}: updated to {after.installed_version!r}."
-    )
+    lines.append(f"{entity_id}: updated to {after.installed_version!r}.")
     return lines
 
 
