@@ -182,10 +182,18 @@ async function openRegulationProfile() {{
   await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 }}
 
+async function selectPrimaryClimate(name) {{
+  const primarySelector = page.locator("ha-selector").first();
+  await primarySelector.locator("#item").click();
+  const dialog = page.getByRole("dialog", {{ name: "Primary climate entity" }});
+  await dialog.getByText(name, {{ exact: true }}).click();
+}}
+
 await ensureLoggedIn();
 await openRegulationProfile();
 await page.getByText("Home schedule start", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 await page.getByText("Home schedule end", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+await selectPrimaryClimate("Office");
 const timeInputs = page.locator("ha-selector-time input");
 await timeInputs.nth(0).fill("06:00");
 await timeInputs.nth(1).fill("06:00");
@@ -194,6 +202,12 @@ await page.getByText(
   "Choose different start and end times for the daily home schedule.",
   {{ exact: true }}
 ).waitFor({{ timeout: 10000 }});
+await timeInputs.nth(1).fill("22:00");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
+  timeout: 10000,
+  state: "detached",
+}});
 }}""".strip()
 
 
@@ -277,7 +291,7 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
         raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
 
     env = os.environ.copy()
-    strict_smoke = [
+    base_smoke = [
         sys.executable,
         "scripts/ha_smoke_test.py",
         "--set-initial-mode",
@@ -292,11 +306,14 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
         "on",
         "--expect-fallback-temperature",
         "20.0",
+        "--base-url",
+        base_url,
+    ]
+    room_smoke = [
+        *base_smoke,
         "--expect-room-count",
         "1",
         "--expect-room-next-change",
-        "--base-url",
-        base_url,
     ]
 
     steps = [
@@ -311,7 +328,7 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
             ],
             "Prepare HA test instance",
         ),
-        (strict_smoke, "Run authenticated HA schedule smoke test"),
+        (base_smoke, "Run authenticated HA base smoke test"),
         (
             [
                 sys.executable,
@@ -341,6 +358,11 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
             [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
             env=pw_env,
             description="Run iteration 1.3 GUI regression",
+        )
+        _run_command(
+            room_smoke,
+            env=env,
+            description="Run authenticated HA schedule smoke test",
         )
     finally:
         subprocess.run(
