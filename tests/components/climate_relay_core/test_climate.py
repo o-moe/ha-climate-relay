@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
 from homeassistant.components.climate import HVACMode
+from homeassistant.const import UnitOfTemperature
 
 from custom_components.climate_relay_core import climate as climate_platform
 from custom_components.climate_relay_core.climate import (
@@ -101,6 +102,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(entity.hvac_mode, HVACMode.HEAT)
+        self.assertEqual(entity.temperature_unit, UnitOfTemperature.CELSIUS)
+        self.assertEqual(entity.target_temperature_step, 0.5)
         self.assertEqual(entity.hvac_modes, [HVACMode.OFF, HVACMode.HEAT])
         self.assertEqual(entity.target_temperature, 21.5)
         self.assertEqual(entity.current_temperature, 19.2)

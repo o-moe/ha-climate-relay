@@ -8,6 +8,7 @@ from typing import Final
 from homeassistant.components.climate import ClimateEntity, HVACMode
 from homeassistant.components.climate.const import SERVICE_SET_TEMPERATURE
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import (
@@ -60,6 +61,8 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_target_temperature_step = 0.5
 
     def __init__(
         self,

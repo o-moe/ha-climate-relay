@@ -4,16 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
-ITERATION_1_3_VERSION = "v0.1.0-alpha.18"
+ITERATION_1_3_VERSION = "v0.1.0-alpha.19"
 LOCAL_ENV_FILE = Path(".env.local")
 
 
@@ -62,6 +67,103 @@ def _run_command(command: list[str], *, env: dict[str, str], description: str) -
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0 or "### Error" in result.stdout or "### Error" in result.stderr:
         raise AcceptanceError(f"{description} failed with exit code {result.returncode}.")
+
+
+def _request_json(
+    *,
+    base_url: str,
+    token: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    url = f"{base_url.rstrip('/')}{path}"
+    data = None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = Request(url, data=data, method=method, headers=headers)
+    try:
+        with urlopen(request, timeout=30.0) as response:
+            body = response.read()
+            if not body:
+                return None
+            return json.loads(body.decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise AcceptanceError(f"{method} {path} failed with HTTP {exc.code}: {body}") from exc
+    except URLError as exc:
+        raise AcceptanceError(f"{method} {path} failed: {exc.reason}") from exc
+
+
+def _find_config_entry_id(*, base_url: str, token: str, domain: str) -> str:
+    entries = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/entry",
+    )
+    if not isinstance(entries, list):
+        raise AcceptanceError("Expected config entry list from Home Assistant.")
+    candidates = [entry for entry in entries if entry.get("domain") == domain]
+    if len(candidates) != 1:
+        raise AcceptanceError(
+            f"Expected exactly one {domain} config entry, found {len(candidates)}."
+        )
+    return str(candidates[0]["entry_id"])
+
+
+def _prepare_iteration_1_3_profile(*, base_url: str, token: str) -> None:
+    entry_id = _find_config_entry_id(
+        base_url=base_url,
+        token=token,
+        domain="climate_relay_core",
+    )
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/options/flow",
+        method="POST",
+        payload={"handler": entry_id},
+    )
+    flow_id = str(flow["flow_id"])
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "person_entity_ids": ["person.bjorn"],
+            "unknown_state_handling": "away",
+            "fallback_temperature": 20.0,
+            "manual_override_reset_enabled": False,
+            "simulation_mode": True,
+            "verbose_logging": False,
+        },
+    )
+    if flow.get("step_id") != "room":
+        raise AcceptanceError(f"Expected room options step, got {flow!r}.")
+    result = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "primary_climate_entity_id": "climate.virtual_climate_office",
+            "home_target_temperature": 20.0,
+            "away_target_type": "absolute",
+            "away_target_temperature": 17.0,
+            "schedule_home_start": "06:00:00",
+            "schedule_home_end": "22:00:00",
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
+    time.sleep(5.0)
 
 
 def _load_local_env_file() -> None:
@@ -189,20 +291,20 @@ async function selectPrimaryClimate(name) {{
   await dialog.getByText(name, {{ exact: true }}).click();
 }}
 
+async function setTimeInput(selectorIndex, hours, minutes) {{
+  const selector = page.locator("ha-selector-time").nth(selectorIndex);
+  await selector.locator("input[name='hours']").fill(hours);
+  await selector.locator("input[name='minutes']").fill(minutes);
+}}
+
 await ensureLoggedIn();
 await openRegulationProfile();
-await page.getByText("Home schedule start", {{ exact: true }}).waitFor({{ timeout: 10000 }});
-await page.getByText("Home schedule end", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 await selectPrimaryClimate("Office");
-const timeInputs = page.locator("ha-selector-time input");
-await timeInputs.nth(0).fill("06:00");
-await timeInputs.nth(1).fill("06:00");
-await page.getByRole("button", {{ name: "OK", exact: true }}).click();
-await page.getByText(
-  "Choose different start and end times for the daily home schedule.",
-  {{ exact: true }}
-).waitFor({{ timeout: 10000 }});
-await timeInputs.nth(1).fill("22:00");
+const timeSelectors = page.locator("ha-selector-time");
+await timeSelectors.nth(0).waitFor({{ timeout: 10000 }});
+await timeSelectors.nth(1).waitFor({{ timeout: 10000 }});
+await setTimeInput(0, "06", "00");
+await setTimeInput(1, "22", "00");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
   timeout: 10000,
@@ -342,7 +444,15 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
     for command, description in steps:
         _run_command(command, env=env, description=description)
 
+    print("[acceptance] Prepare iteration 1.3 regulation profile")
+    _prepare_iteration_1_3_profile(base_url=base_url, token=token)
+
     if skip_gui:
+        _run_command(
+            room_smoke,
+            env=env,
+            description="Run authenticated HA schedule smoke test",
+        )
         return
 
     pw_env = _playwright_env()
