@@ -38,6 +38,8 @@ from custom_components.climate_relay_core.const import (
     CONF_PERSON_ENTITY_IDS,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
     CONF_ROOMS,
+    CONF_SCHEDULE_HOME_END,
+    CONF_SCHEDULE_HOME_START,
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
     CONF_VERBOSE_LOGGING,
@@ -181,6 +183,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                     CONF_HOME_TARGET_TEMPERATURE: 20.5,
                     CONF_AWAY_TARGET_TYPE: "relative",
                     CONF_AWAY_TARGET_TEMPERATURE: -2.0,
+                    CONF_SCHEDULE_HOME_START: "06:30",
+                    CONF_SCHEDULE_HOME_END: "22:15",
                 }
             )
 
@@ -203,6 +207,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 20.5,
                         CONF_AWAY_TARGET_TYPE: "relative",
                         CONF_AWAY_TARGET_TEMPERATURE: -2.0,
+                        CONF_SCHEDULE_HOME_START: "06:30",
+                        CONF_SCHEDULE_HOME_END: "22:15",
                     }
                 ],
             },
@@ -264,6 +270,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                        CONF_SCHEDULE_HOME_START: "06:00:00",
+                        CONF_SCHEDULE_HOME_END: "22:00:00",
                     }
                 ],
             },
@@ -327,6 +335,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                        CONF_SCHEDULE_HOME_START: "06:00:00",
+                        CONF_SCHEDULE_HOME_END: "22:00:00",
                     }
                 ],
             },
@@ -396,6 +406,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                        CONF_SCHEDULE_HOME_START: "06:00:00",
+                        CONF_SCHEDULE_HOME_END: "22:00:00",
                     }
                 ],
             },
@@ -455,6 +467,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 18.0,
+                        CONF_SCHEDULE_HOME_START: "06:00:00",
+                        CONF_SCHEDULE_HOME_END: "22:00:00",
                     }
                 ],
             },
@@ -830,6 +844,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_HOME_TARGET_TEMPERATURE: 21.0,
                 CONF_AWAY_TARGET_TYPE: "absolute",
                 CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                CONF_SCHEDULE_HOME_START: "06:00:00",
+                CONF_SCHEDULE_HOME_END: "22:00:00",
             },
         )
         for key in schema.schema:
@@ -997,6 +1013,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                        CONF_SCHEDULE_HOME_START: "06:00:00",
+                        CONF_SCHEDULE_HOME_END: "22:00:00",
                     }
                 ]
             },

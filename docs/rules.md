@@ -32,6 +32,20 @@ The effective target is the resolved state that will be applied to the room's cl
 - a preset mode
 - a target temperature
 
+## Schedule baseline
+
+The first schedule slice supports one daily home window per configured
+regulation profile. Outside that window the profile uses its configured away
+target. The backend expands the window into a continuous all-days schedule with
+no gaps, evaluates it in local time, and exposes the next scheduled target
+change when effective presence is home.
+
+The schedule domain model also validates the planned broader layouts:
+
+- one schedule shared across all days
+- one weekday schedule plus one weekend schedule
+- one independent schedule for each weekday
+
 ## Rule priority
 
 Priority order:

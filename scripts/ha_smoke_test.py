@@ -69,9 +69,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Minimum number of Climate Relay room climate entities expected.",
     )
     parser.add_argument(
+        "--expect-room-next-change",
+        action="store_true",
+        help="Require at least one room entity to expose next_change_at.",
+    )
+    parser.add_argument(
         "--expect-select-friendly-name",
         default=None,
         help="Expected friendly_name of the Presence Control select entity.",
+    )
+    parser.add_argument(
+        "--set-initial-mode",
+        choices=VALID_MODES,
+        default=None,
+        help="Set Presence Control to this mode before checking state.",
     )
     parser.add_argument(
         "--expect-effective-presence",
@@ -260,7 +271,12 @@ def _assert_select_surface(select_state: EntityState, args: argparse.Namespace) 
     ]
 
 
-def _assert_room_surface(room_entities: list[EntityState]) -> list[str]:
+def _assert_room_surface(
+    room_entities: list[EntityState],
+    *,
+    expect_next_change: bool,
+) -> list[str]:
+    found_next_change = False
     for room in room_entities:
         attrs = room.attributes
         primary_climate_entity_id = attrs.get("primary_climate_entity_id")
@@ -275,6 +291,16 @@ def _assert_room_surface(room_entities: list[EntityState]) -> list[str]:
                 f"Room entity {room.entity_id} has unexpected active_control_context "
                 f"{active_control_context!r}."
             )
+        next_change_at = attrs.get("next_change_at")
+        if next_change_at is not None:
+            if not isinstance(next_change_at, str) or "T" not in next_change_at:
+                raise SmokeTestError(
+                    f"Room entity {room.entity_id} has invalid next_change_at {next_change_at!r}."
+                )
+            found_next_change = True
+
+    if expect_next_change and not found_next_change:
+        raise SmokeTestError("Expected at least one room entity to expose next_change_at.")
 
     return [f"Room surface verified: {entity.entity_id}" for entity in room_entities]
 
@@ -348,6 +374,8 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
 
     services = _get_services(base_url=args.base_url, token=token)
     _assert_service_registered(services)
+    if args.set_initial_mode is not None:
+        _call_set_global_mode(base_url=args.base_url, token=token, mode=args.set_initial_mode)
 
     states = _get_states(base_url=args.base_url, token=token)
     select_state = _find_presence_control_entity(states, args.select_entity_id)
@@ -358,7 +386,10 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
             f"Expected at least {args.expect_room_count} Climate Relay room entities, "
             f"found {len(room_entities)}."
         )
-    room_lines = _assert_room_surface(room_entities)
+    room_lines = _assert_room_surface(
+        room_entities,
+        expect_next_change=args.expect_room_next_change,
+    )
 
     original_mode = select_state.state
     probe_mode = _choose_probe_mode(original_mode)

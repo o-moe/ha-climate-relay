@@ -13,6 +13,7 @@ from pathlib import Path
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
+ITERATION_1_3_VERSION = "v0.1.0-beta.3"
 
 
 class AcceptanceError(RuntimeError):
@@ -28,7 +29,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--iteration",
         required=True,
-        choices=("1.2",),
+        choices=("1.2", "1.3"),
         help="Iteration acceptance workflow to run.",
     )
     parser.add_argument(
@@ -135,6 +136,51 @@ await expectText("Assign the primary climate entity to a Home Assistant area fir
 }}""".strip()
 
 
+def _gui_iteration_1_3_code(base_url: str) -> str:
+    return f"""async () => {{
+const baseUrl = {base_url!r};
+
+async function ensureLoggedIn() {{
+  await page.goto(baseUrl);
+  await page.waitForLoadState("domcontentloaded");
+  if (page.url().includes("/auth/authorize")) {{
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).waitFor({{ timeout: 20000 }});
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).fill("codex");
+    await page.getByRole("textbox", {{ name: "Passwort" }}).fill("codex");
+    await page.getByRole("button", {{ name: "Anmelden" }}).click();
+  }}
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {{
+    await page.waitForTimeout(1000);
+    if (!page.url().includes("/auth/authorize")) {{
+      return;
+    }}
+  }}
+  throw new Error("HA login did not complete.");
+}}
+
+async function openRegulationProfile() {{
+  await page.goto(baseUrl + "/config/integrations/integration/climate_relay_core");
+  await page.getByRole("button", {{ name: "Konfigurieren" }}).click();
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+  await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+}}
+
+await ensureLoggedIn();
+await openRegulationProfile();
+await page.getByText("Home schedule start", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+await page.getByText("Home schedule end", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+const timeInputs = page.locator("ha-selector-time input");
+await timeInputs.nth(0).fill("06:00");
+await timeInputs.nth(1).fill("06:00");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await page.getByText(
+  "Choose different start and end times for the daily home schedule.",
+  {{ exact: true }}
+).waitFor({{ timeout: 10000 }});
+}}""".strip()
+
+
 def _run_iteration_1_2(*, base_url: str, skip_gui: bool) -> None:
     token = os.environ.get(TOKEN_ENV_VAR)
     if not token:
@@ -209,10 +255,91 @@ def _run_iteration_1_2(*, base_url: str, skip_gui: bool) -> None:
         )
 
 
+def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
+
+    env = os.environ.copy()
+    strict_smoke = [
+        sys.executable,
+        "scripts/ha_smoke_test.py",
+        "--set-initial-mode",
+        "home",
+        "--expect-select-friendly-name",
+        "Climate Relay Presence Control",
+        "--expect-effective-presence",
+        "home",
+        "--expect-unknown-state-handling",
+        "away",
+        "--expect-simulation-mode",
+        "on",
+        "--expect-fallback-temperature",
+        "20.0",
+        "--expect-room-count",
+        "1",
+        "--expect-room-next-change",
+        "--base-url",
+        base_url,
+    ]
+
+    steps = [
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_test_instance.py",
+                "--base-url",
+                base_url,
+                "--install-version",
+                f"update.climaterelaycore_update={ITERATION_1_3_VERSION}",
+            ],
+            "Prepare HA test instance",
+        ),
+        (strict_smoke, "Run authenticated HA schedule smoke test"),
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_no_area_fixture.py",
+                "--base-url",
+                base_url,
+            ],
+            "Prepare dedicated no-area fixture",
+        ),
+    ]
+    for command, description in steps:
+        _run_command(command, env=env, description=description)
+
+    if skip_gui:
+        return
+
+    pw_env = _playwright_env()
+    pwcli = pw_env["PWCLI"]
+    session = f"i13{os.getpid()}"
+    try:
+        _run_command(
+            [pwcli, f"-s={session}", "open", base_url],
+            env=pw_env,
+            description="Open Playwright browser session",
+        )
+        _run_command(
+            [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
+            env=pw_env,
+            description="Run iteration 1.3 GUI regression",
+        )
+    finally:
+        subprocess.run(
+            [pwcli, f"-s={session}", "close"],
+            env=pw_env,
+            check=False,
+        )
+
+
 def main() -> int:
     args = _build_parser().parse_args()
     if args.iteration == "1.2":
         _run_iteration_1_2(base_url=args.base_url, skip_gui=args.skip_gui)
+    elif args.iteration == "1.3":
+        _run_iteration_1_3(base_url=args.base_url, skip_gui=args.skip_gui)
     else:
         raise AcceptanceError(f"Unsupported iteration {args.iteration!r}.")
     print(f"[acceptance] Iteration {args.iteration} completed successfully.")

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
+from datetime import datetime
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.climate import HVACMode
 
@@ -19,6 +22,7 @@ from custom_components.climate_relay_core.const import (
     ATTR_ACTIVE_CONTROL_CONTEXT,
     ATTR_DEGRADATION_STATUS,
     ATTR_HUMIDITY_ENTITY_ID,
+    ATTR_NEXT_CHANGE_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
     ATTR_WINDOW_ENTITY_ID,
     CONF_ROOMS,
@@ -40,6 +44,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         window_state: object | None = None,
     ) -> ClimateRelayCoreRoomClimateEntity:
         hass = Mock()
+        hass.services.async_call = AsyncMock()
+        hass.async_create_task = Mock(side_effect=lambda coro: asyncio.create_task(coro))
 
         def get_state(entity_id: str) -> object | None:
             mapping = {
@@ -133,6 +139,92 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(entity.target_temperature, 19.5)
+        self.assertNotIn(ATTR_NEXT_CHANGE_AT, entity.extra_state_attributes)
+
+    async def test_entity_uses_schedule_target_and_exposes_next_change(self) -> None:
+        entity = self._build_entity(
+            effective_presence=EffectivePresence.HOME,
+            primary_state=SimpleNamespace(
+                state="heat",
+                attributes={"temperature": 19.0, "current_temperature": 18.0},
+            ),
+        )
+
+        berlin = ZoneInfo("Europe/Berlin")
+        with (
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(
+                    2026,
+                    4,
+                    29,
+                    23,
+                    0,
+                    tzinfo=berlin,
+                ),
+            ),
+            patch.object(climate_platform.dt_util, "DEFAULT_TIME_ZONE", berlin),
+        ):
+            self.assertEqual(entity.target_temperature, 19.5)
+            self.assertEqual(
+                entity.extra_state_attributes[ATTR_NEXT_CHANGE_AT],
+                "2026-04-30T06:00:00+02:00",
+            )
+
+    async def test_entity_writes_target_when_simulation_mode_is_disabled(self) -> None:
+        entity = self._build_entity(
+            effective_presence=EffectivePresence.HOME,
+            primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
+        )
+
+        with patch.object(
+            climate_platform.dt_util,
+            "now",
+            return_value=datetime(
+                2026,
+                4,
+                29,
+                12,
+                0,
+                tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+            ),
+        ):
+            await entity._async_apply_effective_target(source="test")
+
+        entity.hass.services.async_call.assert_awaited_once_with(
+            "climate",
+            "set_temperature",
+            {"entity_id": "climate.living_room", "temperature": 21.5},
+            blocking=False,
+        )
+
+    async def test_entity_suppresses_target_write_when_simulation_mode_is_enabled(self) -> None:
+        entity = self._build_entity(
+            effective_presence=EffectivePresence.HOME,
+            primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
+        )
+        entity._runtime.config = build_global_config({}, {"simulation_mode": True})
+
+        with (
+            self.assertLogs(climate_platform._LOGGER.name, level="INFO") as logs,
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(
+                    2026,
+                    4,
+                    29,
+                    12,
+                    0,
+                    tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+                ),
+            ),
+        ):
+            await entity._async_apply_effective_target(source="test")
+
+        entity.hass.services.async_call.assert_not_awaited()
+        self.assertIn("Simulation mode suppressed climate.set_temperature", logs.output[0])
 
     async def test_entity_marks_optional_sensor_unavailability_as_degraded(self) -> None:
         entity = self._build_entity(
@@ -223,17 +315,24 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         entity.async_on_remove = Mock()
         entity.async_write_ha_state = Mock()
 
-        with patch.object(
-            climate_platform,
-            "async_track_state_change_event",
-            return_value=lambda: None,
-        ) as track_state_change:
+        with (
+            patch.object(
+                climate_platform,
+                "async_track_state_change_event",
+                return_value=lambda: None,
+            ) as track_state_change,
+            patch.object(
+                climate_platform,
+                "async_track_point_in_utc_time",
+                return_value=lambda: None,
+            ),
+        ):
             await entity.async_added_to_hass()
 
         entity._handle_runtime_update()
         entity._handle_source_state_change(None)
 
-        self.assertEqual(entity.async_on_remove.call_count, 2)
+        self.assertEqual(entity.async_on_remove.call_count, 3)
         track_state_change.assert_called_once()
         tracked_entities = track_state_change.call_args.args[1]
         self.assertEqual(

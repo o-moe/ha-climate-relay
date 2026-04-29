@@ -53,7 +53,9 @@
           "window_entity_id": "Window contact",
           "home_target_temperature": "Home target temperature",
           "away_target_type": "Away target type",
-          "away_target_temperature": "Away target value"
+          "away_target_temperature": "Away target value",
+          "schedule_home_start": "Home schedule start",
+          "schedule_home_end": "Home schedule end"
         },
         "data_description": {
           "primary_climate_entity_id": "Required source climate entity. Its Home Assistant area is reused for Climate Relay placement.",
@@ -61,7 +63,9 @@
           "window_entity_id": "Optional window-contact source for later area automation slices.",
           "home_target_temperature": "Target temperature used when the effective presence is home.",
           "away_target_type": "Choose whether the away target is absolute or relative to the home target.",
-          "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type."
+          "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type.",
+          "schedule_home_start": "Daily local time when the profile starts using the home target while presence is home.",
+          "schedule_home_end": "Daily local time when the profile returns to the away target."
         }
       }
     },
@@ -69,7 +73,8 @@
       "person_entities_required": "Select at least one tracked presence entity.",
       "reset_time_required": "This field is required when the daily override reset is enabled.",
       "primary_climate_required": "Select exactly one primary climate entity.",
-      "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first."
+      "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first.",
+      "schedule_window_required": "Choose different start and end times for the daily home schedule."
     }
   },
   "selector": {

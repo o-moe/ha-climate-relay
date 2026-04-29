@@ -22,6 +22,9 @@ from .const import (
     CONF_PERSON_ENTITY_IDS,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
     CONF_ROOMS,
+    CONF_SCHEDULE,
+    CONF_SCHEDULE_HOME_END,
+    CONF_SCHEDULE_HOME_START,
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
     CONF_VERBOSE_LOGGING,
@@ -29,6 +32,8 @@ from .const import (
     DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_NAME,
+    DEFAULT_SCHEDULE_HOME_END,
+    DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DOMAIN,
 )
@@ -192,6 +197,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     is None
                 ):
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
+                if submitted[CONF_SCHEDULE_HOME_START] == submitted[CONF_SCHEDULE_HOME_END]:
+                    errors[CONF_SCHEDULE_HOME_END] = "schedule_window_required"
 
                 if not errors:
                     return self.async_create_entry(
@@ -238,6 +245,8 @@ def _default_room_data() -> dict[str, Any]:
         CONF_HOME_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
         CONF_AWAY_TARGET_TYPE: DEFAULT_AWAY_TARGET_TYPE,
         CONF_AWAY_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE - 3.0,
+        CONF_SCHEDULE_HOME_START: DEFAULT_SCHEDULE_HOME_START,
+        CONF_SCHEDULE_HOME_END: DEFAULT_SCHEDULE_HOME_END,
     }
 
 
@@ -343,6 +352,12 @@ def _normalize_room_options(values: dict[str, Any]) -> dict[str, Any]:
         CONF_AWAY_TARGET_TEMPERATURE: float(
             values.get(CONF_AWAY_TARGET_TEMPERATURE, DEFAULT_FALLBACK_TEMPERATURE - 3.0)
         ),
+        CONF_SCHEDULE_HOME_START: _normalize_time_field_value(
+            _schedule_value(values, CONF_SCHEDULE_HOME_START, DEFAULT_SCHEDULE_HOME_START)
+        ),
+        CONF_SCHEDULE_HOME_END: _normalize_time_field_value(
+            _schedule_value(values, CONF_SCHEDULE_HOME_END, DEFAULT_SCHEDULE_HOME_END)
+        ),
     }
 
 
@@ -358,6 +373,14 @@ def _normalize_time_field_value(raw_value: Any) -> str | None:
     if normalized in (None, ""):
         return None
     return str(normalized)
+
+
+def _schedule_value(values: dict[str, Any], key: str, default: str) -> Any:
+    """Return a schedule value from either flat or nested persistence."""
+    raw_schedule = _unwrap_selector_value(values.get(CONF_SCHEDULE))
+    if isinstance(raw_schedule, dict) and key in raw_schedule:
+        return raw_schedule[key]
+    return values.get(key, default)
 
 
 def _normalize_optional_entity_selector(raw_value: Any) -> str | None:
@@ -556,5 +579,13 @@ def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
                     unit_of_measurement="°C",
                 )
             ),
+            vol.Required(
+                CONF_SCHEDULE_HOME_START,
+                default=values.get(CONF_SCHEDULE_HOME_START, DEFAULT_SCHEDULE_HOME_START),
+            ): selector.TimeSelector(),
+            vol.Required(
+                CONF_SCHEDULE_HOME_END,
+                default=values.get(CONF_SCHEDULE_HOME_END, DEFAULT_SCHEDULE_HOME_END),
+            ): selector.TimeSelector(),
         }
     )

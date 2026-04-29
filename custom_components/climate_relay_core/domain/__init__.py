@@ -8,6 +8,14 @@ from .modes import (
     resolve_presence_mode,
 )
 from .rooms import resolve_room_target
+from .schedules import (
+    RoomSchedule,
+    ScheduleBlock,
+    ScheduleEvaluation,
+    build_daily_home_window_schedule,
+    evaluate_schedule,
+    validate_schedule,
+)
 from .window_actions import WindowActionType, resolve_window_action
 
 __all__ = [
@@ -15,10 +23,16 @@ __all__ = [
     "EffectivePresence",
     "EffectiveTarget",
     "GlobalMode",
+    "RoomSchedule",
     "RoomTarget",
+    "ScheduleBlock",
+    "ScheduleEvaluation",
     "UnknownStateHandling",
     "WindowActionType",
+    "build_daily_home_window_schedule",
+    "evaluate_schedule",
     "resolve_room_target",
     "resolve_presence_mode",
     "resolve_window_action",
+    "validate_schedule",
 ]

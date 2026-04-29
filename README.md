@@ -13,6 +13,7 @@ climate control.
 - configurable handling for `unknown` and `unavailable` person states
 - a configurable fallback target temperature for required-component failure
 - optional simulation mode for dry-run observation without device actuation
+- one daily schedule window for the first area-bound regulation profile
 - optional verbose diagnostic logging
 
 ## Installation
@@ -103,14 +104,14 @@ updates. If you enable verbose logging in the options flow, it also logs the
 resolved effective presence context.
 
 If simulation mode is enabled, the integration still evaluates its control
-logic and logs the resulting decisions. In the current feature scope, there
-are no active thermostat or other device writes yet, so the option is
-primarily a preparation and observation mode for later room-level actuation.
+logic and logs the resulting room target decisions, but it suppresses the
+`climate.set_temperature` write that would otherwise be sent to the primary
+climate entity.
 
 ## Current Limitations
 
-- room entities are not exposed yet
-- schedules are not available yet
+- only one area-bound regulation profile is supported
+- schedule editing is limited to one daily home window
 - room-level manual overrides are not available yet
 - window automation is not available yet
 - a dedicated dashboard UI is not available yet
