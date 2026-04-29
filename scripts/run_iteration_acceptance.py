@@ -14,6 +14,7 @@ DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
 ITERATION_1_3_VERSION = "v0.1.0-beta.3"
+LOCAL_ENV_FILE = Path(".env.local")
 
 
 class AcceptanceError(RuntimeError):
@@ -61,6 +62,21 @@ def _run_command(command: list[str], *, env: dict[str, str], description: str) -
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0 or "### Error" in result.stdout or "### Error" in result.stderr:
         raise AcceptanceError(f"{description} failed with exit code {result.returncode}.")
+
+
+def _load_local_env_file() -> None:
+    """Load ignored local environment values when the shell did not export them."""
+    if os.environ.get(TOKEN_ENV_VAR) or not LOCAL_ENV_FILE.exists():
+        return
+
+    for raw_line in LOCAL_ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == TOKEN_ENV_VAR and value:
+            os.environ[TOKEN_ENV_VAR] = value
+            return
 
 
 def _playwright_env() -> dict[str, str]:
@@ -335,6 +351,7 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
 
 
 def main() -> int:
+    _load_local_env_file()
     args = _build_parser().parse_args()
     if args.iteration == "1.2":
         _run_iteration_1_2(base_url=args.base_url, skip_gui=args.skip_gui)
