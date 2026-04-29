@@ -13,7 +13,7 @@ from pathlib import Path
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
-ITERATION_1_3_VERSION = "v0.1.0-beta.3"
+ITERATION_1_3_VERSION = "v0.1.0-alpha.17"
 LOCAL_ENV_FILE = Path(".env.local")
 
 
