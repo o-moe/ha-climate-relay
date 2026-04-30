@@ -12,3 +12,61 @@ set_global_mode:
             - auto
             - home
             - away
+set_area_override:
+  name: Set area override
+  description: Set or replace one Climate Relay area manual override.
+  fields:
+    area_id:
+      name: Area
+      description: Climate Relay area ID, profile ID, or primary climate entity ID.
+      required: true
+      selector:
+        text:
+    target_temperature:
+      name: Target temperature
+      description: Absolute target temperature for the area override.
+      required: true
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.5
+          mode: box
+          unit_of_measurement: C
+    termination_type:
+      name: Termination
+      description: How the override should end.
+      required: true
+      selector:
+        select:
+          options:
+            - duration
+            - until_time
+            - next_timeblock
+            - never
+    duration_minutes:
+      name: Duration minutes
+      description: Required when termination is duration.
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 1440
+          step: 1
+          mode: box
+    until_time:
+      name: Until time
+      description: Required when termination is until_time.
+      required: false
+      selector:
+        time:
+clear_area_override:
+  name: Clear area override
+  description: Clear one Climate Relay area manual override.
+  fields:
+    area_id:
+      name: Area
+      description: Climate Relay area ID, profile ID, or primary climate entity ID.
+      required: true
+      selector:
+        text:

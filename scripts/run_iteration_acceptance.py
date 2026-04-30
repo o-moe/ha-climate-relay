@@ -19,6 +19,7 @@ DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
 ITERATION_1_3_VERSION = "v0.1.0-alpha.19"
+ITERATION_1_4_VERSION = "v0.1.0-alpha.21"
 LOCAL_ENV_FILE = Path(".env.local")
 
 
@@ -35,7 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--iteration",
         required=True,
-        choices=("1.2", "1.3"),
+        choices=("1.2", "1.3", "1.4"),
         help="Iteration acceptance workflow to run.",
     )
     parser.add_argument(
@@ -482,6 +483,108 @@ def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
         )
 
 
+def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
+
+    env = os.environ.copy()
+    base_smoke = [
+        sys.executable,
+        "scripts/ha_smoke_test.py",
+        "--expect-area-override-services",
+        "--set-initial-mode",
+        "home",
+        "--expect-select-friendly-name",
+        "Climate Relay Presence Control",
+        "--expect-effective-presence",
+        "home",
+        "--expect-unknown-state-handling",
+        "away",
+        "--expect-simulation-mode",
+        "on",
+        "--expect-fallback-temperature",
+        "20.0",
+        "--base-url",
+        base_url,
+    ]
+    override_smoke = [
+        *base_smoke,
+        "--expect-room-count",
+        "1",
+        "--set-room-override-area-id",
+        "auto",
+        "--set-room-override-temperature",
+        "22.5",
+        "--set-room-override-duration-minutes",
+        "45",
+        "--expect-room-override-ends",
+    ]
+
+    steps = [
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_test_instance.py",
+                "--base-url",
+                base_url,
+                "--install-version",
+                f"update.climaterelaycore_update={ITERATION_1_4_VERSION}",
+            ],
+            "Prepare HA test instance",
+        ),
+        (base_smoke, "Run authenticated HA base smoke test"),
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_no_area_fixture.py",
+                "--base-url",
+                base_url,
+            ],
+            "Prepare dedicated no-area fixture",
+        ),
+    ]
+    for command, description in steps:
+        _run_command(command, env=env, description=description)
+
+    print("[acceptance] Prepare iteration 1.4 regulation profile")
+    _prepare_iteration_1_3_profile(base_url=base_url, token=token)
+
+    if skip_gui:
+        _run_command(
+            override_smoke,
+            env=env,
+            description="Run authenticated HA manual override smoke test",
+        )
+        return
+
+    pw_env = _playwright_env()
+    pwcli = pw_env["PWCLI"]
+    session = f"i14{os.getpid()}"
+    try:
+        _run_command(
+            [pwcli, f"-s={session}", "open", base_url],
+            env=pw_env,
+            description="Open Playwright browser session",
+        )
+        _run_command(
+            [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
+            env=pw_env,
+            description="Run iteration 1.4 configuration GUI regression",
+        )
+        _run_command(
+            override_smoke,
+            env=env,
+            description="Run authenticated HA manual override smoke test",
+        )
+    finally:
+        subprocess.run(
+            [pwcli, f"-s={session}", "close"],
+            env=pw_env,
+            check=False,
+        )
+
+
 def main() -> int:
     _load_local_env_file()
     args = _build_parser().parse_args()
@@ -489,6 +592,8 @@ def main() -> int:
         _run_iteration_1_2(base_url=args.base_url, skip_gui=args.skip_gui)
     elif args.iteration == "1.3":
         _run_iteration_1_3(base_url=args.base_url, skip_gui=args.skip_gui)
+    elif args.iteration == "1.4":
+        _run_iteration_1_4(base_url=args.base_url, skip_gui=args.skip_gui)
     else:
         raise AcceptanceError(f"Unsupported iteration {args.iteration!r}.")
     print(f"[acceptance] Iteration {args.iteration} completed successfully.")

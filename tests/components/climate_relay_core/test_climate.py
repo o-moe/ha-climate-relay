@@ -24,6 +24,7 @@ from custom_components.climate_relay_core.const import (
     ATTR_DEGRADATION_STATUS,
     ATTR_HUMIDITY_ENTITY_ID,
     ATTR_NEXT_CHANGE_AT,
+    ATTR_OVERRIDE_ENDS_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
     ATTR_WINDOW_ENTITY_ID,
     CONF_ROOMS,
@@ -62,6 +63,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         global_runtime.effective_presence = effective_presence
         global_runtime.config = build_global_config({}, {"fallback_temperature": 16.5})
         global_runtime.subscribe = Mock(return_value=lambda: None)
+        global_runtime.manual_override_for_profile = Mock(return_value=None)
+        global_runtime.next_manual_override_reset_at = Mock(return_value=None)
 
         (room_config,) = build_room_configs(
             {},
@@ -175,6 +178,65 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
                 "2026-04-30T06:00:00+02:00",
             )
 
+    async def test_entity_prioritizes_manual_override_and_exposes_end_time(self) -> None:
+        entity = self._build_entity(
+            effective_presence=EffectivePresence.HOME,
+            primary_state=SimpleNamespace(
+                state="heat",
+                attributes={"temperature": 19.0, "current_temperature": 18.0},
+            ),
+        )
+        ends_at = datetime(2026, 4, 30, 13, 30, tzinfo=ZoneInfo("Europe/Berlin"))
+        entity._runtime.manual_override_for_profile.return_value = SimpleNamespace(
+            target_temperature=23.0,
+            ends_at=ends_at,
+        )
+        entity._runtime.next_manual_override_reset_at.return_value = None
+
+        self.assertEqual(entity.target_temperature, 23.0)
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT],
+            "manual_override",
+        )
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_OVERRIDE_ENDS_AT],
+            "2026-04-30T13:30:00+02:00",
+        )
+        self.assertNotIn(ATTR_NEXT_CHANGE_AT, entity.extra_state_attributes)
+
+    async def test_next_update_uses_earliest_manual_override_boundary(self) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
+        )
+        timezone = ZoneInfo("Europe/Berlin")
+        ends_at = datetime(2026, 4, 30, 14, 0, tzinfo=timezone)
+        reset_at = datetime(2026, 4, 30, 13, 0, tzinfo=timezone)
+        entity._runtime.manual_override_for_profile.return_value = SimpleNamespace(
+            target_temperature=23.0,
+            ends_at=ends_at,
+        )
+        entity._runtime.next_manual_override_reset_at.return_value = reset_at
+
+        self.assertEqual(entity._next_update_at, reset_at)
+
+        entity._runtime.next_manual_override_reset_at.return_value = None
+        self.assertEqual(entity._next_update_at, ends_at)
+
+    async def test_schedule_update_cancels_previous_timer_and_skips_missing_target(self) -> None:
+        entity = self._build_entity(primary_state=None)
+        entity.async_write_ha_state = Mock()
+        entity.hass.async_create_task = Mock(side_effect=lambda coro: asyncio.create_task(coro))
+
+        await entity._async_apply_effective_target(source="missing")
+        entity.hass.services.async_call.assert_not_awaited()
+
+        cancel_scheduled_update = Mock()
+        entity._cancel_scheduled_update = cancel_scheduled_update
+        entity._handle_schedule_update(None)
+
+        cancel_scheduled_update.assert_called_once()
+        entity.async_write_ha_state.assert_called_once()
+
     async def test_entity_writes_target_when_simulation_mode_is_disabled(self) -> None:
         entity = self._build_entity(
             effective_presence=EffectivePresence.HOME,
@@ -284,6 +346,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         global_runtime.effective_presence = EffectivePresence.HOME
         global_runtime.config = build_global_config({}, {})
         global_runtime.subscribe = Mock(return_value=lambda: None)
+        global_runtime.manual_override_for_profile = Mock(return_value=None)
+        global_runtime.next_manual_override_reset_at = Mock(return_value=None)
         (room_config,) = build_room_configs(
             {},
             {
@@ -332,10 +396,10 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         ):
             await entity.async_added_to_hass()
 
-        entity._handle_runtime_update()
-        entity._handle_source_state_change(None)
+            entity._handle_runtime_update()
+            entity._handle_source_state_change(None)
 
-        self.assertEqual(entity.async_on_remove.call_count, 3)
+        self.assertEqual(entity.async_on_remove.call_count, 4)
         track_state_change.assert_called_once()
         tracked_entities = track_state_change.call_args.args[1]
         self.assertEqual(

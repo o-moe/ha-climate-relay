@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import time
+from datetime import datetime, time, timedelta
 from types import MappingProxyType
 from typing import Final
 
@@ -19,6 +19,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers import (
     entity_registry as er,
 )
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .const import (
@@ -41,10 +42,14 @@ from .const import (
 from .domain import (
     EffectivePresence,
     GlobalMode,
+    ManualOverride,
+    OverrideTerminationType,
     RoomSchedule,
     RoomTarget,
     UnknownStateHandling,
     build_daily_home_window_schedule,
+    build_manual_override,
+    evaluate_schedule,
     resolve_presence_mode,
 )
 
@@ -95,10 +100,17 @@ class RegulationProfileConfig:
 class GlobalRuntime:
     """In-memory runtime model for the integration-wide global state."""
 
-    def __init__(self, hass: HomeAssistant, config: GlobalConfig) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config: GlobalConfig,
+        room_configs: tuple[RegulationProfileConfig, ...] = (),
+    ) -> None:
         self._hass = hass
         self._config = config
+        self._room_configs = room_configs
         self._global_mode = GlobalMode.AUTO
+        self._manual_overrides: dict[str, ManualOverride] = {}
         self._subscribers: set[Callable[[], None]] = set()
 
     @property
@@ -110,6 +122,11 @@ class GlobalRuntime:
     def global_mode(self) -> GlobalMode:
         """Return the currently selected global mode."""
         return self._global_mode
+
+    @property
+    def room_configs(self) -> tuple[RegulationProfileConfig, ...]:
+        """Return the active regulation-profile configs."""
+        return self._room_configs
 
     @property
     def effective_presence(self) -> EffectivePresence:
@@ -146,6 +163,81 @@ class GlobalRuntime:
 
         self._notify_subscribers()
 
+    async def async_set_area_override(
+        self,
+        *,
+        area_id: str,
+        target_temperature: float,
+        termination_type: OverrideTerminationType,
+        source: str,
+        duration_minutes: int | None = None,
+        until_time: str | None = None,
+    ) -> ManualOverride:
+        """Set or replace one area-scoped manual override."""
+        room_config = self._find_room_config(area_id)
+        now = dt_util.now()
+        schedule_evaluation = evaluate_schedule(
+            room_config.schedule,
+            now,
+            dt_util.DEFAULT_TIME_ZONE,
+        )
+        override = build_manual_override(
+            profile_id=room_config.profile_id,
+            area_id=room_config.area_id or room_config.profile_id,
+            target_temperature=target_temperature,
+            termination_type=termination_type,
+            duration_minutes=duration_minutes,
+            until_time=until_time,
+            next_change_at=schedule_evaluation.next_change_at,
+            now=now,
+            timezone=dt_util.DEFAULT_TIME_ZONE,
+        )
+        self._manual_overrides[room_config.profile_id] = override
+        _LOGGER.info(
+            "Manual override for %s set to %.1f via %s; termination=%s ends_at=%s",
+            room_config.display_name,
+            override.target_temperature,
+            source,
+            override.termination_type,
+            override.ends_at.isoformat() if override.ends_at is not None else "never",
+        )
+        self._notify_subscribers()
+        return override
+
+    async def async_clear_area_override(self, *, area_id: str, source: str) -> None:
+        """Clear one area-scoped manual override."""
+        room_config = self._find_room_config(area_id)
+        removed = self._manual_overrides.pop(room_config.profile_id, None)
+        if removed is not None:
+            _LOGGER.info("Manual override for %s cleared via %s", room_config.display_name, source)
+            self._notify_subscribers()
+
+    @callback
+    def manual_override_for_profile(self, profile_id: str) -> ManualOverride | None:
+        """Return the active manual override for one regulation profile."""
+        override = self._manual_overrides.get(profile_id)
+        if override is None:
+            return None
+
+        now = dt_util.now()
+        if not override.is_active(now) or self._is_after_daily_reset(override, now):
+            self._manual_overrides.pop(profile_id, None)
+            return None
+        return override
+
+    @callback
+    def next_manual_override_reset_at(self, override: ManualOverride) -> datetime | None:
+        """Return the next configured daily reset time for an override."""
+        reset_time_value = self._config.manual_override_reset_time
+        if reset_time_value is None:
+            return None
+        reset_time = time.fromisoformat(reset_time_value)
+        local_now = dt_util.now().astimezone(dt_util.DEFAULT_TIME_ZONE)
+        reset_at = datetime.combine(local_now.date(), reset_time, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        if reset_at <= local_now:
+            reset_at += timedelta(days=1)
+        return reset_at
+
     @callback
     def update_config(self, config: GlobalConfig) -> None:
         """Replace the runtime configuration and notify listeners."""
@@ -159,6 +251,16 @@ class GlobalRuntime:
             config.manual_override_reset_time or "disabled",
             config.simulation_mode,
         )
+        self._notify_subscribers()
+
+    @callback
+    def update_room_configs(self, room_configs: tuple[RegulationProfileConfig, ...]) -> None:
+        """Replace the active room configuration set."""
+        self._room_configs = room_configs
+        valid_profile_ids = {room.profile_id for room in room_configs}
+        for profile_id in tuple(self._manual_overrides):
+            if profile_id not in valid_profile_ids:
+                self._manual_overrides.pop(profile_id, None)
         self._notify_subscribers()
 
     @callback
@@ -176,6 +278,28 @@ class GlobalRuntime:
     def _notify_subscribers(self) -> None:
         for subscriber in self._subscribers:
             subscriber()
+
+    def _find_room_config(self, area_id: str) -> RegulationProfileConfig:
+        for room_config in self._room_configs:
+            if area_id in {
+                room_config.area_id,
+                room_config.profile_id,
+                room_config.primary_climate_entity_id,
+            }:
+                return room_config
+        raise ValueError(f"Unknown Climate Relay area or profile: {area_id!r}")
+
+    def _is_after_daily_reset(self, override: ManualOverride, now: datetime) -> bool:
+        reset_time_value = self._config.manual_override_reset_time
+        if reset_time_value is None:
+            return False
+        reset_time = time.fromisoformat(reset_time_value)
+        local_now = now.astimezone(dt_util.DEFAULT_TIME_ZONE)
+        local_created_at = override.created_at.astimezone(dt_util.DEFAULT_TIME_ZONE)
+        reset_at = datetime.combine(local_now.date(), reset_time, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        if reset_at > local_now:
+            reset_at -= timedelta(days=1)
+        return local_created_at < reset_at <= local_now
 
 
 def build_global_config(data: dict | None, options: dict | None) -> GlobalConfig:
