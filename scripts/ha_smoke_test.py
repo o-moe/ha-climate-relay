@@ -88,7 +88,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--set-room-override-area-id",
         default=None,
-        help="Set a manual override for this Climate Relay area/profile during the smoke test.",
+        help=(
+            "Set a manual override for this Climate Relay area/profile during the smoke test. "
+            "Use 'auto' to target the first discovered room entity's primary climate entity."
+        ),
     )
     parser.add_argument(
         "--set-room-override-temperature",
@@ -491,10 +494,20 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
     )
     override_lines: list[str] = []
     if args.set_room_override_area_id is not None:
+        override_area_id = args.set_room_override_area_id
+        if override_area_id == "auto":
+            if not room_entities:
+                raise SmokeTestError("Cannot auto-select override target without room entities.")
+            primary_climate_entity_id = room_entities[0].attributes.get("primary_climate_entity_id")
+            if not isinstance(primary_climate_entity_id, str):
+                raise SmokeTestError(
+                    "Cannot auto-select override target without primary_climate_entity_id."
+                )
+            override_area_id = primary_climate_entity_id
         _call_set_area_override(
             base_url=args.base_url,
             token=token,
-            area_id=args.set_room_override_area_id,
+            area_id=override_area_id,
             target_temperature=args.set_room_override_temperature,
             duration_minutes=args.set_room_override_duration_minutes,
         )
@@ -507,7 +520,7 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
         _call_clear_area_override(
             base_url=args.base_url,
             token=token,
-            area_id=args.set_room_override_area_id,
+            area_id=override_area_id,
         )
 
     original_mode = select_state.state

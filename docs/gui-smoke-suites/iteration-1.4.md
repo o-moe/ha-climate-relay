@@ -27,7 +27,7 @@ export HOME_ASSISTANT_TOKEN='<long-lived-token>'
 uv run python scripts/run_iteration_acceptance.py --iteration 1.4
 ```
 
-The shortcut installs `v0.1.0-alpha.20` explicitly for
+The shortcut installs `v0.1.0-alpha.21` explicitly for
 `update.climaterelaycore_update`, following the alpha verification path in
 [release-policy.md](../release-policy.md).
 

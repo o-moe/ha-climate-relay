@@ -19,7 +19,7 @@ DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
 ITERATION_1_3_VERSION = "v0.1.0-alpha.19"
-ITERATION_1_4_VERSION = "v0.1.0-alpha.20"
+ITERATION_1_4_VERSION = "v0.1.0-alpha.21"
 LOCAL_ENV_FILE = Path(".env.local")
 
 
@@ -513,7 +513,7 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
         "--expect-room-count",
         "1",
         "--set-room-override-area-id",
-        "office",
+        "auto",
         "--set-room-override-temperature",
         "22.5",
         "--set-room-override-duration-minutes",
