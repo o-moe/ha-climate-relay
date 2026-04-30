@@ -14,6 +14,7 @@ climate control.
 - a configurable fallback target temperature for required-component failure
 - optional simulation mode for dry-run observation without device actuation
 - one daily schedule window for the first area-bound regulation profile
+- manual overrides for the first area-bound regulation profile through Home Assistant services
 - optional verbose diagnostic logging
 
 ## Installation
@@ -76,14 +77,17 @@ The options dialog includes short inline explanations. At a high level:
 - tracked presence entities drive `Automatic` presence resolution
 - unknown-state handling defines how missing person state is interpreted
 - fallback temperature is reserved for later room/failure handling
-- daily override reset is preparation for later room-level manual overrides
+- daily override reset clears active manual overrides at the configured local time
 - simulation mode keeps future actuator writes suppressed while still logging intended behavior
 - verbose logging expands diagnostic output for troubleshooting
 
 After a successful installation and setup, Home Assistant currently exposes:
 
 - one `select` entity named `Presence Control`
-- one service named `climate_relay_core.set_global_mode`
+- one area-level `climate` entity for the configured regulation profile
+- services named `climate_relay_core.set_global_mode`,
+  `climate_relay_core.set_area_override`, and
+  `climate_relay_core.clear_area_override`
 
 ## How To Use It
 
@@ -96,6 +100,21 @@ integration-wide behavior.
 
 You can change the mode either through the `Presence Control` select entity or via
 the service `climate_relay_core.set_global_mode`.
+
+The area-level climate entity follows the configured schedule unless a manual
+override is active. Manual overrides are created through
+`climate_relay_core.set_area_override` with an area/profile reference, an
+absolute target temperature, and one termination type:
+
+- `duration` with `duration_minutes`
+- `until_time` with a local wall-clock time
+- `next_timeblock`
+- `never`
+
+Creating a second override for the same area replaces the first. Use
+`climate_relay_core.clear_area_override` to clear the active override. Temporary
+overrides expose `override_ends_at` on the area climate entity; active overrides
+set `active_control_context` to `manual_override`.
 
 ## Diagnostics
 
@@ -112,7 +131,7 @@ climate entity.
 
 - only one area-bound regulation profile is supported
 - schedule editing is limited to one daily home window
-- room-level manual overrides are not available yet
+- manual overrides are service/action based; a dedicated dashboard control is not available yet
 - window automation is not available yet
 - a dedicated dashboard UI is not available yet
 

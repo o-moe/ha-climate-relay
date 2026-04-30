@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from custom_components.climate_relay_core.const import (
     DEFAULT_FALLBACK_TEMPERATURE,
@@ -138,6 +140,201 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(subscriber.call_count, 2)
         self.assertTrue(runtime.config.simulation_mode)
+
+    async def test_area_override_lifecycle_replaces_clears_and_expires(self) -> None:
+        hass = Mock()
+        hass.states.get = Mock(return_value=SimpleNamespace(state="home"))
+        timezone = ZoneInfo("Europe/Berlin")
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            return_value=AreaReference(area_id="office", area_name="Office"),
+        ):
+            room_configs = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.office",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+                hass=hass,
+            )
+        runtime = GlobalRuntime(
+            hass,
+            build_global_config({}, {}),
+            room_configs,
+        )
+        subscriber = Mock()
+        runtime.subscribe(subscriber)
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            first = await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=22.0,
+                termination_type="duration",
+                duration_minutes=30,
+                source="test",
+            )
+            second = await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=19.0,
+                termination_type="never",
+                source="test",
+            )
+
+        self.assertEqual(first.ends_at, datetime(2026, 4, 30, 12, 30, tzinfo=timezone))
+        self.assertEqual(
+            runtime.manual_override_for_profile(room_configs[0].profile_id),
+            second,
+        )
+        self.assertEqual(second.target_temperature, 19.0)
+
+        await runtime.async_clear_area_override(area_id="office", source="test")
+        self.assertIsNone(runtime.manual_override_for_profile(room_configs[0].profile_id))
+        self.assertGreaterEqual(subscriber.call_count, 3)
+
+    async def test_area_override_uses_daily_reset_and_rejects_unknown_area(self) -> None:
+        hass = Mock()
+        hass.states.get = Mock(return_value=SimpleNamespace(state="home"))
+        timezone = ZoneInfo("Europe/Berlin")
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            return_value=AreaReference(area_id="office", area_name="Office"),
+        ):
+            room_configs = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.office",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+                hass=hass,
+            )
+        runtime = GlobalRuntime(
+            hass,
+            build_global_config({}, {"manual_override_reset_time": "05:30:00"}),
+            room_configs,
+        )
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 22, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            await runtime.async_set_area_override(
+                area_id="climate.office",
+                target_temperature=22.0,
+                termination_type="never",
+                source="test",
+            )
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 5, 1, 5, 31, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            self.assertIsNone(runtime.manual_override_for_profile(room_configs[0].profile_id))
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 5, 1, 5, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            override = await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=22.0,
+                termination_type="never",
+                source="test",
+            )
+            self.assertEqual(
+                runtime.next_manual_override_reset_at(override),
+                datetime(2026, 5, 1, 5, 30, tzinfo=timezone),
+            )
+
+        with self.assertRaisesRegex(ValueError, "Unknown Climate Relay area"):
+            await runtime.async_clear_area_override(area_id="unknown", source="test")
+
+    async def test_room_config_update_drops_stale_overrides_and_reset_can_be_disabled(
+        self,
+    ) -> None:
+        hass = Mock()
+        hass.states.get = Mock(return_value=SimpleNamespace(state="home"))
+        timezone = ZoneInfo("Europe/Berlin")
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            return_value=AreaReference(area_id="office", area_name="Office"),
+        ):
+            room_configs = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.office",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        }
+                    ]
+                },
+                hass=hass,
+            )
+        runtime = GlobalRuntime(hass, build_global_config({}, {}), room_configs)
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            override = await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=22.0,
+                termination_type="duration",
+                duration_minutes=15,
+                source="test",
+            )
+            self.assertIsNone(runtime.next_manual_override_reset_at(override))
+
+        runtime.update_room_configs(())
+
+        self.assertIsNone(runtime.manual_override_for_profile(room_configs[0].profile_id))
 
     async def test_build_global_config_prefers_options_over_entry_data(self) -> None:
         config = build_global_config(

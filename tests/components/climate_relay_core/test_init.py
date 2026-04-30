@@ -10,13 +10,20 @@ from homeassistant.const import Platform
 
 from custom_components.climate_relay_core import (
     PLATFORMS,
+    _async_handle_clear_area_override,
+    _async_handle_set_area_override,
     _async_handle_set_global_mode,
     _async_register_services,
     async_setup,
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.climate_relay_core.const import DOMAIN, SERVICE_SET_GLOBAL_MODE
+from custom_components.climate_relay_core.const import (
+    DOMAIN,
+    SERVICE_CLEAR_AREA_OVERRIDE,
+    SERVICE_SET_AREA_OVERRIDE,
+    SERVICE_SET_GLOBAL_MODE,
+)
 from custom_components.climate_relay_core.domain import GlobalMode
 
 
@@ -48,8 +55,16 @@ class IntegrationSetupTests(IsolatedAsyncioTestCase):
         self.assertTrue(await async_setup_entry(hass, entry))
         self.assertEqual(hass.data[DOMAIN]["entry-1"]["title"], "Test Entry")
         self.assertEqual(PLATFORMS, [Platform.SELECT, Platform.CLIMATE])
-        hass.services.async_register.assert_called_once()
-        self.assertEqual(hass.services.async_register.call_args.args[1], SERVICE_SET_GLOBAL_MODE)
+        self.assertEqual(hass.services.async_register.call_count, 3)
+        registered_services = {call.args[1] for call in hass.services.async_register.call_args_list}
+        self.assertEqual(
+            registered_services,
+            {
+                SERVICE_SET_GLOBAL_MODE,
+                SERVICE_SET_AREA_OVERRIDE,
+                SERVICE_CLEAR_AREA_OVERRIDE,
+            },
+        )
 
     async def test_async_unload_entry_removes_entry_metadata(self) -> None:
         hass = AsyncMock()
@@ -65,7 +80,7 @@ class IntegrationSetupTests(IsolatedAsyncioTestCase):
 
         self.assertTrue(await async_unload_entry(hass, entry))
         self.assertNotIn("entry-1", hass.data[DOMAIN])
-        hass.services.async_remove.assert_called_once_with(DOMAIN, SERVICE_SET_GLOBAL_MODE)
+        self.assertEqual(hass.services.async_remove.call_count, 3)
 
     async def test_async_unload_entry_keeps_service_when_other_entries_remain(self) -> None:
         hass = AsyncMock()
@@ -109,6 +124,63 @@ class IntegrationSetupTests(IsolatedAsyncioTestCase):
         runtime.async_set_global_mode.assert_awaited_once_with(
             GlobalMode.HOME,
             source="service",
+        )
+
+    async def test_area_override_services_update_runtime(self) -> None:
+        runtime = Mock()
+        runtime.async_set_area_override = AsyncMock()
+        runtime.async_clear_area_override = AsyncMock()
+        hass = AsyncMock()
+        hass.data = {DOMAIN: {"entry-1": {"runtime": runtime}}}
+
+        await _async_handle_set_area_override(
+            SimpleNamespace(
+                hass=hass,
+                data={
+                    "area_id": "office",
+                    "target_temperature": 22.5,
+                    "termination_type": "duration",
+                    "duration_minutes": 45,
+                },
+            )
+        )
+        await _async_handle_clear_area_override(
+            SimpleNamespace(hass=hass, data={"area_id": "office"})
+        )
+
+        runtime.async_set_area_override.assert_awaited_once_with(
+            area_id="office",
+            target_temperature=22.5,
+            termination_type="duration",
+            duration_minutes=45,
+            until_time=None,
+            source="service",
+        )
+        runtime.async_clear_area_override.assert_awaited_once_with(
+            area_id="office",
+            source="service",
+        )
+
+    async def test_area_override_services_return_when_no_entries_exist(self) -> None:
+        hass = AsyncMock()
+        hass.data = {DOMAIN: {}}
+
+        self.assertIsNone(
+            await _async_handle_set_area_override(
+                SimpleNamespace(
+                    hass=hass,
+                    data={
+                        "area_id": "office",
+                        "target_temperature": 22.5,
+                        "termination_type": "never",
+                    },
+                )
+            )
+        )
+        self.assertIsNone(
+            await _async_handle_clear_area_override(
+                SimpleNamespace(hass=hass, data={"area_id": "office"})
+            )
         )
 
     async def test_set_global_mode_service_returns_when_no_entries_exist(self) -> None:

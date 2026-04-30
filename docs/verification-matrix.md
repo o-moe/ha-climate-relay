@@ -35,6 +35,21 @@ Iteration `1.3` adds the following executable evidence:
   `docs/gui-smoke-suites/iteration-1.3.md`,
   `scripts/run_iteration_acceptance.py --iteration 1.3`
 
+Iteration `1.4` adds the following executable evidence:
+
+- `V-UT-005`: `tests/components/climate_relay_core/test_overrides.py`,
+  `tests/components/climate_relay_core/test_runtime.py`
+- `V-UT-008`: `tests/components/climate_relay_core/test_overrides.py`,
+  `tests/components/climate_relay_core/test_runtime.py`
+- `V-IT-003`: `tests/components/climate_relay_core/test_init.py`,
+  `tests/components/climate_relay_core/test_runtime.py`,
+  `scripts/ha_smoke_test.py`
+- `V-IT-006`: `tests/components/climate_relay_core/test_climate.py`,
+  `scripts/ha_smoke_test.py`
+- `V-AT-002`, `V-AT-004`:
+  `docs/gui-smoke-suites/iteration-1.4.md`,
+  `scripts/run_iteration_acceptance.py --iteration 1.4`
+
 ## Verification method legend
 
 - `UT`: Unit test

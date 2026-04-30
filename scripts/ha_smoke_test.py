@@ -17,7 +17,14 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 SERVICE_DOMAIN = "climate_relay_core"
-SERVICE_NAME = "set_global_mode"
+SERVICE_CLEAR_AREA_OVERRIDE = "clear_area_override"
+SERVICE_SET_AREA_OVERRIDE = "set_area_override"
+SERVICE_SET_GLOBAL_MODE = "set_global_mode"
+SERVICE_NAMES = (
+    SERVICE_SET_GLOBAL_MODE,
+    SERVICE_SET_AREA_OVERRIDE,
+    SERVICE_CLEAR_AREA_OVERRIDE,
+)
 VALID_MODES = ("auto", "home", "away")
 VALID_EFFECTIVE_PRESENCE = ("home", "away")
 VALID_SIMULATION_MODE = ("on", "off")
@@ -72,6 +79,33 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expect-room-next-change",
         action="store_true",
         help="Require at least one room entity to expose next_change_at.",
+    )
+    parser.add_argument(
+        "--expect-area-override-services",
+        action="store_true",
+        help="Require the manual override services introduced in iteration 1.4.",
+    )
+    parser.add_argument(
+        "--set-room-override-area-id",
+        default=None,
+        help="Set a manual override for this Climate Relay area/profile during the smoke test.",
+    )
+    parser.add_argument(
+        "--set-room-override-temperature",
+        type=float,
+        default=22.5,
+        help="Manual override target temperature used with --set-room-override-area-id.",
+    )
+    parser.add_argument(
+        "--set-room-override-duration-minutes",
+        type=int,
+        default=45,
+        help="Manual override duration used with --set-room-override-area-id.",
+    )
+    parser.add_argument(
+        "--expect-room-override-ends",
+        action="store_true",
+        help="Require a room entity to expose override_ends_at after setting an override.",
     )
     parser.add_argument(
         "--expect-select-friendly-name",
@@ -286,7 +320,7 @@ def _assert_room_surface(
                 f"Room entity {room.entity_id} has invalid primary_climate_entity_id "
                 f"{primary_climate_entity_id!r}."
             )
-        if active_control_context not in {"schedule", "fallback"}:
+        if active_control_context not in {"manual_override", "schedule", "fallback"}:
             raise SmokeTestError(
                 f"Room entity {room.entity_id} has unexpected active_control_context "
                 f"{active_control_context!r}."
@@ -305,24 +339,86 @@ def _assert_room_surface(
     return [f"Room surface verified: {entity.entity_id}" for entity in room_entities]
 
 
-def _assert_service_registered(services: list[dict[str, Any]]) -> None:
+def _assert_service_registered(
+    services: list[dict[str, Any]],
+    *,
+    expect_area_override_services: bool,
+) -> tuple[str, ...]:
+    expected_services = (
+        SERVICE_NAMES if expect_area_override_services else (SERVICE_SET_GLOBAL_MODE,)
+    )
     for domain_entry in services:
         if domain_entry.get("domain") != SERVICE_DOMAIN:
             continue
         service_names = domain_entry.get("services", {})
-        if SERVICE_NAME in service_names:
-            return
-    raise SmokeTestError(f"Service {SERVICE_DOMAIN}.{SERVICE_NAME} is not registered.")
+        if all(service_name in service_names for service_name in expected_services):
+            return expected_services
+    raise SmokeTestError(
+        f"Expected services under {SERVICE_DOMAIN}: {', '.join(expected_services)}."
+    )
 
 
 def _call_set_global_mode(*, base_url: str, token: str, mode: str) -> None:
     _request_json(
         base_url=base_url,
         token=token,
-        path=f"/api/services/{SERVICE_DOMAIN}/{SERVICE_NAME}",
+        path=f"/api/services/{SERVICE_DOMAIN}/{SERVICE_SET_GLOBAL_MODE}",
         method="POST",
         payload={"mode": mode},
     )
+
+
+def _call_set_area_override(
+    *,
+    base_url: str,
+    token: str,
+    area_id: str,
+    target_temperature: float,
+    duration_minutes: int,
+) -> None:
+    _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/services/{SERVICE_DOMAIN}/{SERVICE_SET_AREA_OVERRIDE}",
+        method="POST",
+        payload={
+            "area_id": area_id,
+            "target_temperature": target_temperature,
+            "termination_type": "duration",
+            "duration_minutes": duration_minutes,
+        },
+    )
+
+
+def _call_clear_area_override(*, base_url: str, token: str, area_id: str) -> None:
+    _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/services/{SERVICE_DOMAIN}/{SERVICE_CLEAR_AREA_OVERRIDE}",
+        method="POST",
+        payload={"area_id": area_id},
+    )
+
+
+def _assert_manual_override_surface(
+    room_entities: list[EntityState],
+    *,
+    expect_override_ends: bool,
+) -> list[str]:
+    override_rooms = [
+        room
+        for room in room_entities
+        if room.attributes.get("active_control_context") == "manual_override"
+    ]
+    if not override_rooms:
+        raise SmokeTestError("Expected one room entity to expose manual_override context.")
+    if expect_override_ends:
+        override_ends_at = override_rooms[0].attributes.get("override_ends_at")
+        if not isinstance(override_ends_at, str) or "T" not in override_ends_at:
+            raise SmokeTestError(
+                "Expected manual override room entity to expose valid override_ends_at."
+            )
+    return [f"Manual override verified: {override_rooms[0].entity_id}"]
 
 
 def _wait_for_select_state(
@@ -373,7 +469,10 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
         raise SmokeTestError(f"Unexpected /api/ response: {api_status!r}")
 
     services = _get_services(base_url=args.base_url, token=token)
-    _assert_service_registered(services)
+    expected_services = _assert_service_registered(
+        services,
+        expect_area_override_services=args.expect_area_override_services,
+    )
     if args.set_initial_mode is not None:
         _call_set_global_mode(base_url=args.base_url, token=token, mode=args.set_initial_mode)
 
@@ -390,6 +489,26 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
         room_entities,
         expect_next_change=args.expect_room_next_change,
     )
+    override_lines: list[str] = []
+    if args.set_room_override_area_id is not None:
+        _call_set_area_override(
+            base_url=args.base_url,
+            token=token,
+            area_id=args.set_room_override_area_id,
+            target_temperature=args.set_room_override_temperature,
+            duration_minutes=args.set_room_override_duration_minutes,
+        )
+        time.sleep(2.0)
+        room_entities = _find_room_entities(_get_states(base_url=args.base_url, token=token))
+        override_lines = _assert_manual_override_surface(
+            room_entities,
+            expect_override_ends=args.expect_room_override_ends,
+        )
+        _call_clear_area_override(
+            base_url=args.base_url,
+            token=token,
+            area_id=args.set_room_override_area_id,
+        )
 
     original_mode = select_state.state
     probe_mode = _choose_probe_mode(original_mode)
@@ -422,11 +541,12 @@ def _run_smoke_test(args: argparse.Namespace) -> list[str]:
 
     lines = [
         f"API reachable: {args.base_url}",
-        f"Service present: {SERVICE_DOMAIN}.{SERVICE_NAME}",
+        f"Services present: {SERVICE_DOMAIN}.{', '.join(expected_services)}",
         f"Presence Control entity: {select_state.entity_id}",
         *select_lines,
         f"Room climate entities: {len(room_entities)}",
         *room_lines,
+        *override_lines,
         (
             "Mode transition verified: "
             f"{original_mode} -> {changed_state.state} -> {restored_state.state}"

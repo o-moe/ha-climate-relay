@@ -22,6 +22,7 @@ from .const import (
     ATTR_DEGRADATION_STATUS,
     ATTR_HUMIDITY_ENTITY_ID,
     ATTR_NEXT_CHANGE_AT,
+    ATTR_OVERRIDE_ENDS_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
     ATTR_WINDOW_ENTITY_ID,
     DOMAIN,
@@ -35,6 +36,7 @@ ATTR_HVAC_MODES: Final = "hvac_modes"
 DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE: Final = "optional_sensor_unavailable"
 DEGRADATION_REQUIRED_COMPONENT_FALLBACK: Final = "required_component_fallback"
 ACTIVE_CONTEXT_FALLBACK: Final = "fallback"
+ACTIVE_CONTEXT_MANUAL_OVERRIDE: Final = "manual_override"
 ACTIVE_CONTEXT_SCHEDULE: Final = "schedule"
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -134,6 +136,10 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @property
     def target_temperature(self) -> float:
         """Return the resolved profile target temperature."""
+        manual_override = self._manual_override
+        if manual_override is not None:
+            return manual_override.target_temperature
+
         if self._primary_state is None:
             return self._runtime.config.fallback_temperature
 
@@ -185,6 +191,9 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         next_change_at = self._next_change_at
         if next_change_at is not None:
             attrs[ATTR_NEXT_CHANGE_AT] = next_change_at.isoformat()
+        manual_override = self._manual_override
+        if manual_override is not None and manual_override.ends_at is not None:
+            attrs[ATTR_OVERRIDE_ENDS_AT] = manual_override.ends_at.isoformat()
         if self._degradation_status is not None:
             attrs[ATTR_DEGRADATION_STATUS] = self._degradation_status
         return attrs
@@ -207,9 +216,15 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @property
     def _active_control_context(self) -> str:
+        if self._manual_override is not None:
+            return ACTIVE_CONTEXT_MANUAL_OVERRIDE
         if self._primary_state is None:
             return ACTIVE_CONTEXT_FALLBACK
         return ACTIVE_CONTEXT_SCHEDULE
+
+    @property
+    def _manual_override(self):  # type: ignore[no-untyped-def]
+        return self._runtime.manual_override_for_profile(self._room_config.profile_id)
 
     @property
     def _schedule_evaluation(self):  # type: ignore[no-untyped-def]
@@ -230,6 +245,8 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @property
     def _next_change_at(self):  # type: ignore[no-untyped-def]
+        if self._manual_override is not None:
+            return None
         if self._runtime.effective_presence is EffectivePresence.AWAY:
             return None
         evaluation = self._schedule_evaluation
@@ -246,6 +263,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @callback
     def _handle_runtime_update(self) -> None:
         self.async_write_ha_state()
+        self._schedule_next_update()
         self.hass.async_create_task(self._async_apply_effective_target(source="runtime_update"))
 
     @callback
@@ -264,15 +282,30 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         if self._cancel_scheduled_update is not None:
             self._cancel_scheduled_update()
             self._cancel_scheduled_update = None
-        next_change_at = self._next_change_at
-        if next_change_at is None:
+        next_update_at = self._next_update_at
+        if next_update_at is None:
             return
         self._cancel_scheduled_update = async_track_point_in_utc_time(
             self.hass,
             self._handle_schedule_update,
-            dt_util.as_utc(next_change_at),
+            dt_util.as_utc(next_update_at),
         )
         self.async_on_remove(self._cancel_scheduled_update)
+
+    @property
+    def _next_update_at(self):  # type: ignore[no-untyped-def]
+        manual_override = self._manual_override
+        if manual_override is not None:
+            candidates = [
+                candidate
+                for candidate in (
+                    manual_override.ends_at,
+                    self._runtime.next_manual_override_reset_at(manual_override),
+                )
+                if candidate is not None
+            ]
+            return min(candidates) if candidates else None
+        return self._next_change_at
 
     async def _async_apply_effective_target(self, *, source: str) -> None:
         if self._primary_state is None:
