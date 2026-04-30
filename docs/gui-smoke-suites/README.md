@@ -37,7 +37,7 @@ Current single-command regression entry point:
 
 ```bash
 export HOME_ASSISTANT_TOKEN='<long-lived-token>'
-uv run python scripts/run_iteration_acceptance.py --iteration 1.2
+uv run python scripts/run_iteration_acceptance.py --iteration 1.3
 ```
 
 This runner is the intended anchor for continued iteration work:
@@ -81,4 +81,5 @@ Examples:
 
 - [iteration-1.1.md](./iteration-1.1.md)
 - [iteration-1.2.md](./iteration-1.2.md)
+- [iteration-1.3.md](./iteration-1.3.md)
 - [template.md](./template.md)

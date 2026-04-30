@@ -4,15 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
+ITERATION_1_3_VERSION = "v0.1.0-alpha.19"
+LOCAL_ENV_FILE = Path(".env.local")
 
 
 class AcceptanceError(RuntimeError):
@@ -28,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--iteration",
         required=True,
-        choices=("1.2",),
+        choices=("1.2", "1.3"),
         help="Iteration acceptance workflow to run.",
     )
     parser.add_argument(
@@ -60,6 +67,118 @@ def _run_command(command: list[str], *, env: dict[str, str], description: str) -
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0 or "### Error" in result.stdout or "### Error" in result.stderr:
         raise AcceptanceError(f"{description} failed with exit code {result.returncode}.")
+
+
+def _request_json(
+    *,
+    base_url: str,
+    token: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    url = f"{base_url.rstrip('/')}{path}"
+    data = None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = Request(url, data=data, method=method, headers=headers)
+    try:
+        with urlopen(request, timeout=30.0) as response:
+            body = response.read()
+            if not body:
+                return None
+            return json.loads(body.decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise AcceptanceError(f"{method} {path} failed with HTTP {exc.code}: {body}") from exc
+    except URLError as exc:
+        raise AcceptanceError(f"{method} {path} failed: {exc.reason}") from exc
+
+
+def _find_config_entry_id(*, base_url: str, token: str, domain: str) -> str:
+    entries = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/entry",
+    )
+    if not isinstance(entries, list):
+        raise AcceptanceError("Expected config entry list from Home Assistant.")
+    candidates = [entry for entry in entries if entry.get("domain") == domain]
+    if len(candidates) != 1:
+        raise AcceptanceError(
+            f"Expected exactly one {domain} config entry, found {len(candidates)}."
+        )
+    return str(candidates[0]["entry_id"])
+
+
+def _prepare_iteration_1_3_profile(*, base_url: str, token: str) -> None:
+    entry_id = _find_config_entry_id(
+        base_url=base_url,
+        token=token,
+        domain="climate_relay_core",
+    )
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/options/flow",
+        method="POST",
+        payload={"handler": entry_id},
+    )
+    flow_id = str(flow["flow_id"])
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "person_entity_ids": ["person.bjorn"],
+            "unknown_state_handling": "away",
+            "fallback_temperature": 20.0,
+            "manual_override_reset_enabled": False,
+            "simulation_mode": True,
+            "verbose_logging": False,
+        },
+    )
+    if flow.get("step_id") != "room":
+        raise AcceptanceError(f"Expected room options step, got {flow!r}.")
+    result = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "primary_climate_entity_id": "climate.virtual_climate_office",
+            "home_target_temperature": 20.0,
+            "away_target_type": "absolute",
+            "away_target_temperature": 17.0,
+            "schedule_home_start": "06:00:00",
+            "schedule_home_end": "22:00:00",
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
+    time.sleep(5.0)
+
+
+def _load_local_env_file() -> None:
+    """Load ignored local environment values when the shell did not export them."""
+    if os.environ.get(TOKEN_ENV_VAR) or not LOCAL_ENV_FILE.exists():
+        return
+
+    for raw_line in LOCAL_ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == TOKEN_ENV_VAR and value:
+            os.environ[TOKEN_ENV_VAR] = value
+            return
 
 
 def _playwright_env() -> dict[str, str]:
@@ -132,6 +251,65 @@ await expectText("Select exactly one primary climate entity.");
 await selectPrimaryClimate("No Area Fixture");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Assign the primary climate entity to a Home Assistant area first.");
+}}""".strip()
+
+
+def _gui_iteration_1_3_code(base_url: str) -> str:
+    return f"""async () => {{
+const baseUrl = {base_url!r};
+
+async function ensureLoggedIn() {{
+  await page.goto(baseUrl);
+  await page.waitForLoadState("domcontentloaded");
+  if (page.url().includes("/auth/authorize")) {{
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).waitFor({{ timeout: 20000 }});
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).fill("codex");
+    await page.getByRole("textbox", {{ name: "Passwort" }}).fill("codex");
+    await page.getByRole("button", {{ name: "Anmelden" }}).click();
+  }}
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {{
+    await page.waitForTimeout(1000);
+    if (!page.url().includes("/auth/authorize")) {{
+      return;
+    }}
+  }}
+  throw new Error("HA login did not complete.");
+}}
+
+async function openRegulationProfile() {{
+  await page.goto(baseUrl + "/config/integrations/integration/climate_relay_core");
+  await page.getByRole("button", {{ name: "Konfigurieren" }}).click();
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+  await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+}}
+
+async function selectPrimaryClimate(name) {{
+  const primarySelector = page.locator("ha-selector").first();
+  await primarySelector.locator("#item").click();
+  const dialog = page.getByRole("dialog", {{ name: "Primary climate entity" }});
+  await dialog.getByText(name, {{ exact: true }}).click();
+}}
+
+async function setTimeInput(selectorIndex, hours, minutes) {{
+  const selector = page.locator("ha-selector-time").nth(selectorIndex);
+  await selector.locator("input[name='hours']").fill(hours);
+  await selector.locator("input[name='minutes']").fill(minutes);
+}}
+
+await ensureLoggedIn();
+await openRegulationProfile();
+await selectPrimaryClimate("Office");
+const timeSelectors = page.locator("ha-selector-time");
+await timeSelectors.nth(0).waitFor({{ timeout: 10000 }});
+await timeSelectors.nth(1).waitFor({{ timeout: 10000 }});
+await setTimeInput(0, "06", "00");
+await setTimeInput(1, "22", "00");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
+  timeout: 10000,
+  state: "detached",
+}});
 }}""".strip()
 
 
@@ -209,10 +387,108 @@ def _run_iteration_1_2(*, base_url: str, skip_gui: bool) -> None:
         )
 
 
+def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
+
+    env = os.environ.copy()
+    base_smoke = [
+        sys.executable,
+        "scripts/ha_smoke_test.py",
+        "--set-initial-mode",
+        "home",
+        "--expect-select-friendly-name",
+        "Climate Relay Presence Control",
+        "--expect-effective-presence",
+        "home",
+        "--expect-unknown-state-handling",
+        "away",
+        "--expect-simulation-mode",
+        "on",
+        "--expect-fallback-temperature",
+        "20.0",
+        "--base-url",
+        base_url,
+    ]
+    room_smoke = [
+        *base_smoke,
+        "--expect-room-count",
+        "1",
+        "--expect-room-next-change",
+    ]
+
+    steps = [
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_test_instance.py",
+                "--base-url",
+                base_url,
+                "--install-version",
+                f"update.climaterelaycore_update={ITERATION_1_3_VERSION}",
+            ],
+            "Prepare HA test instance",
+        ),
+        (base_smoke, "Run authenticated HA base smoke test"),
+        (
+            [
+                sys.executable,
+                "scripts/ha_prepare_no_area_fixture.py",
+                "--base-url",
+                base_url,
+            ],
+            "Prepare dedicated no-area fixture",
+        ),
+    ]
+    for command, description in steps:
+        _run_command(command, env=env, description=description)
+
+    print("[acceptance] Prepare iteration 1.3 regulation profile")
+    _prepare_iteration_1_3_profile(base_url=base_url, token=token)
+
+    if skip_gui:
+        _run_command(
+            room_smoke,
+            env=env,
+            description="Run authenticated HA schedule smoke test",
+        )
+        return
+
+    pw_env = _playwright_env()
+    pwcli = pw_env["PWCLI"]
+    session = f"i13{os.getpid()}"
+    try:
+        _run_command(
+            [pwcli, f"-s={session}", "open", base_url],
+            env=pw_env,
+            description="Open Playwright browser session",
+        )
+        _run_command(
+            [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
+            env=pw_env,
+            description="Run iteration 1.3 GUI regression",
+        )
+        _run_command(
+            room_smoke,
+            env=env,
+            description="Run authenticated HA schedule smoke test",
+        )
+    finally:
+        subprocess.run(
+            [pwcli, f"-s={session}", "close"],
+            env=pw_env,
+            check=False,
+        )
+
+
 def main() -> int:
+    _load_local_env_file()
     args = _build_parser().parse_args()
     if args.iteration == "1.2":
         _run_iteration_1_2(base_url=args.base_url, skip_gui=args.skip_gui)
+    elif args.iteration == "1.3":
+        _run_iteration_1_3(base_url=args.base_url, skip_gui=args.skip_gui)
     else:
         raise AcceptanceError(f"Unsupported iteration {args.iteration!r}.")
     print(f"[acceptance] Iteration {args.iteration} completed successfully.")

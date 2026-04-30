@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 
 from custom_components.climate_relay_core.const import (
     DEFAULT_FALLBACK_TEMPERATURE,
+    DEFAULT_SCHEDULE_HOME_END,
+    DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
 )
 from custom_components.climate_relay_core.domain import EffectivePresence, GlobalMode
@@ -19,6 +21,8 @@ from custom_components.climate_relay_core.runtime import (
     _normalize_entity_id,
     _normalize_optional_value,
     _normalize_person_entity_ids,
+    _normalize_schedule,
+    _normalize_time,
     _normalize_unknown_state_handling,
     _resolve_area_reference,
     _resolve_profile_display_name,
@@ -231,6 +235,7 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(room_config.window_entity_id, "binary_sensor.living_room_window")
         self.assertEqual(room_config.home_target.temperature, 21.0)
         self.assertEqual(room_config.away_target.mode, "relative")
+        self.assertEqual(room_config.schedule.layout, "all_days")
 
     async def test_build_room_configs_uses_default_target_type_and_optional_entities(self) -> None:
         (room_config,) = build_room_configs(
@@ -250,6 +255,45 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertIsNone(room_config.humidity_entity_id)
         self.assertIsNone(room_config.window_entity_id)
         self.assertEqual(room_config.away_target.mode, "absolute")
+        self.assertEqual(
+            _normalize_time(None, default=DEFAULT_SCHEDULE_HOME_START).isoformat(),
+            DEFAULT_SCHEDULE_HOME_START,
+        )
+        self.assertEqual(
+            _normalize_time({"value": "22:00"}, default=DEFAULT_SCHEDULE_HOME_END).isoformat(),
+            DEFAULT_SCHEDULE_HOME_END,
+        )
+
+    async def test_build_room_configs_normalizes_schedule_times(self) -> None:
+        (room_config,) = build_room_configs(
+            {},
+            {
+                "rooms": [
+                    {
+                        "primary_climate_entity_id": "climate.office",
+                        "home_target_temperature": 20.0,
+                        "away_target_type": "absolute",
+                        "away_target_temperature": 17.0,
+                        "schedule_home_start": "07:15",
+                        "schedule_home_end": "21:45",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(room_config.schedule.layout, "all_days")
+        self.assertEqual(room_config.schedule.blocks_by_key["all_days"][1].start_minute, 435)
+        self.assertEqual(room_config.schedule.blocks_by_key["all_days"][1].end_minute, 1305)
+
+        nested_schedule = _normalize_schedule(
+            {
+                "schedule": {
+                    "schedule_home_start": {"value": "08:00"},
+                    "schedule_home_end": {"value": "20:00"},
+                }
+            }
+        )
+        self.assertEqual(nested_schedule.blocks_by_key["all_days"][1].start_minute, 480)
 
     async def test_build_room_configs_derives_area_context_when_hass_is_available(self) -> None:
         hass = Mock()

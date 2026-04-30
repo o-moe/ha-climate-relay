@@ -23,6 +23,18 @@ Iteration `1.1` currently contributes the following executable evidence:
 - `V-IT-002`: `tests/components/climate_relay_core/test_select.py`, `tests/components/climate_relay_core/test_init.py`
 - `V-IT-003`: `tests/components/climate_relay_core/test_init.py`
 
+Iteration `1.3` adds the following executable evidence:
+
+- `V-UT-006`: `tests/components/climate_relay_core/test_schedules.py`
+- `V-UT-007`: `tests/components/climate_relay_core/test_climate.py`,
+  `tests/components/climate_relay_core/test_runtime.py`
+- `V-IT-006`: `tests/components/climate_relay_core/test_climate.py`,
+  `scripts/ha_smoke_test.py`
+- `V-IT-007`: `tests/components/climate_relay_core/test_climate.py`
+- `V-AT-003`, `V-AT-004`, `V-AT-006`:
+  `docs/gui-smoke-suites/iteration-1.3.md`,
+  `scripts/run_iteration_acceptance.py --iteration 1.3`
+
 ## Verification method legend
 
 - `UT`: Unit test

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import time
 from types import MappingProxyType
 from typing import Final
 
@@ -27,16 +28,23 @@ from .const import (
     CONF_HUMIDITY_ENTITY_ID,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
     CONF_ROOMS,
+    CONF_SCHEDULE,
+    CONF_SCHEDULE_HOME_END,
+    CONF_SCHEDULE_HOME_START,
     CONF_WINDOW_ENTITY_ID,
     DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
+    DEFAULT_SCHEDULE_HOME_END,
+    DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
 )
 from .domain import (
     EffectivePresence,
     GlobalMode,
+    RoomSchedule,
     RoomTarget,
     UnknownStateHandling,
+    build_daily_home_window_schedule,
     resolve_presence_mode,
 )
 
@@ -81,6 +89,7 @@ class RegulationProfileConfig:
     window_entity_id: str | None
     home_target: RoomTarget
     away_target: RoomTarget
+    schedule: RoomSchedule
 
 
 class GlobalRuntime:
@@ -228,6 +237,7 @@ def build_room_configs(
                     mode=room[CONF_AWAY_TARGET_TYPE],
                     temperature=room[CONF_AWAY_TARGET_TEMPERATURE],
                 ),
+                schedule=room[CONF_SCHEDULE],
             )
         )
 
@@ -308,9 +318,33 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
         CONF_HOME_TARGET_TEMPERATURE: float(raw_value.get(CONF_HOME_TARGET_TEMPERATURE)),
         CONF_AWAY_TARGET_TYPE: _normalize_target_type(raw_value.get(CONF_AWAY_TARGET_TYPE)),
         CONF_AWAY_TARGET_TEMPERATURE: float(raw_value.get(CONF_AWAY_TARGET_TEMPERATURE)),
+        CONF_SCHEDULE: _normalize_schedule(raw_value),
         "legacy_name": legacy_name,
     }
     return MappingProxyType(normalized)
+
+
+def _normalize_schedule(raw_value: dict[str, object]) -> RoomSchedule:
+    """Normalize the persisted schedule payload for one room."""
+    raw_schedule = _normalize_optional_value(raw_value.get(CONF_SCHEDULE))
+    if isinstance(raw_schedule, dict):
+        raw_home_start = raw_schedule.get(CONF_SCHEDULE_HOME_START)
+        raw_home_end = raw_schedule.get(CONF_SCHEDULE_HOME_END)
+    else:
+        raw_home_start = raw_value.get(CONF_SCHEDULE_HOME_START)
+        raw_home_end = raw_value.get(CONF_SCHEDULE_HOME_END)
+
+    return build_daily_home_window_schedule(
+        _normalize_time(raw_home_start, default=DEFAULT_SCHEDULE_HOME_START),
+        _normalize_time(raw_home_end, default=DEFAULT_SCHEDULE_HOME_END),
+    )
+
+
+def _normalize_time(raw_value: object, *, default: str) -> time:
+    """Normalize a time selector value."""
+    normalized = _normalize_optional_value(raw_value)
+    value = str(normalized or default).strip()
+    return time.fromisoformat(value)
 
 
 def _normalize_entity_id(raw_value: object, *, required: bool) -> str | None:
