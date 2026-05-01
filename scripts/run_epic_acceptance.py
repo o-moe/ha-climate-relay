@@ -508,6 +508,13 @@ async function expectText(text) {{
   );
 }}
 
+async function scrollDialog(deltaY) {{
+  const dialog = page.getByRole("dialog", {{ name: "Regulation Profile" }});
+  await dialog.hover();
+  await page.mouse.wheel(0, deltaY);
+  await page.waitForTimeout(500);
+}}
+
 async function clearEntitySelector(selectorIndex) {{
   const entitySelector = page.locator("ha-selector").nth(selectorIndex);
   const clearButton = entitySelector.locator(".clear ha-button, .clear button").first();
@@ -559,10 +566,12 @@ for (const text of [
   "Window contact",
   "Open-window action",
   "Open-window custom temperature",
-  "Open-window delay",
 ]) {{
   await expectText(text);
 }}
+await scrollDialog(700);
+await expectText("Open-window delay");
+await scrollDialog(-700);
 
 await clearEntitySelector(0);
 await submitAndStay();
