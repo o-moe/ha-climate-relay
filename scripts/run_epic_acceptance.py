@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.6"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.7"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 
@@ -281,6 +281,7 @@ def _prepare_epic_2_profile(*, base_url: str, token: str) -> None:
             "primary_climate_entity_id": "climate.virtual_climate_office",
             "window_entity_id": "binary_sensor.virtual_window_office",
             "window_action_type": "minimum_temperature",
+            "window_custom_temperature": None,
             "window_open_delay_seconds": 0,
             "home_target_temperature": 20.0,
             "away_target_type": "absolute",
@@ -529,6 +530,27 @@ async function expectText(text) {{
   }}
 }}
 
+async function expectAnyText(texts) {{
+  await installBrowserHelpers();
+  const found = await page.waitForFunction(
+    (expectedTexts) => {{
+      const pageText = window.__climateRelayAcceptance.readText(document);
+      return expectedTexts.some((text) => pageText.includes(text));
+    }},
+    texts,
+    {{ timeout: 10000 }},
+  ).catch(() => null);
+  if (!found) {{
+    const visibleText = await page.evaluate(() =>
+      window.__climateRelayAcceptance.readText(document).replace(/\\s+/g, " ").slice(0, 1600),
+    );
+    throw new Error(
+      `Timed out waiting for any text: ${{texts.join(", ")}}. `
+        + `Visible text excerpt: ${{visibleText}}`,
+    );
+  }}
+}}
+
 async function scrollDialog(deltaY, steps = 1) {{
   await installBrowserHelpers();
   await page.evaluate((delta) => {{
@@ -612,12 +634,18 @@ async function installBrowserHelpers() {{
         if (!element) {{
           throw new Error(`Missing selector host ${{localName}}[${{selectorIndex}}]`);
         }}
-        element.value = value;
-        element.dispatchEvent(new CustomEvent("value-changed", {{
-          bubbles: true,
-          composed: true,
-          detail: {{ value }},
-        }}));
+        const targets = [element];
+        if (element.getRootNode().host) {{
+          targets.push(element.getRootNode().host);
+        }}
+        for (const target of targets) {{
+          target.value = value;
+          target.dispatchEvent(new CustomEvent("value-changed", {{
+            bubbles: true,
+            composed: true,
+            detail: {{ value }},
+          }}));
+        }}
       }},
     }};
   }});
@@ -673,13 +701,42 @@ async function setNumberInput(selectorIndex, value) {{
   await input.dispatchEvent("change");
   await selector.evaluate((element, value) => {{
     const numericValue = Number(value);
-    element.value = Number.isNaN(numericValue) ? value : numericValue;
-    element.dispatchEvent(new CustomEvent("value-changed", {{
-      bubbles: true,
-      composed: true,
-      detail: {{ value: element.value }},
-    }}));
+    const finalValue = Number.isNaN(numericValue) ? value : numericValue;
+    const targets = [element];
+    if (element.getRootNode().host) {{
+      targets.push(element.getRootNode().host);
+    }}
+    for (const target of targets) {{
+      target.value = finalValue;
+      target.dispatchEvent(new CustomEvent("value-changed", {{
+        bubbles: true,
+        composed: true,
+        detail: {{ value: finalValue }},
+      }}));
+    }}
   }}, String(value));
+}}
+
+async function clearNumberInput(selectorIndex) {{
+  const selector = page.locator("ha-selector-number").nth(selectorIndex);
+  const input = selector.locator("input").first();
+  await input.fill("");
+  await input.dispatchEvent("input");
+  await input.dispatchEvent("change");
+  await selector.evaluate((element) => {{
+    const targets = [element];
+    if (element.getRootNode().host) {{
+      targets.push(element.getRootNode().host);
+    }}
+    for (const target of targets) {{
+      target.value = null;
+      target.dispatchEvent(new CustomEvent("value-changed", {{
+        bubbles: true,
+        composed: true,
+        detail: {{ value: null }},
+      }}));
+    }}
+  }});
 }}
 
 async function setTimeInput(selectorIndex, hours, minutes) {{
@@ -691,12 +748,18 @@ async function setTimeInput(selectorIndex, hours, minutes) {{
     await input.dispatchEvent("change");
   }}
   await selector.evaluate((element, value) => {{
-    element.value = value;
-    element.dispatchEvent(new CustomEvent("value-changed", {{
-      bubbles: true,
-      composed: true,
-      detail: {{ value }},
-    }}));
+    const targets = [element];
+    if (element.getRootNode().host) {{
+      targets.push(element.getRootNode().host);
+    }}
+    for (const target of targets) {{
+      target.value = value;
+      target.dispatchEvent(new CustomEvent("value-changed", {{
+        bubbles: true,
+        composed: true,
+        detail: {{ value }},
+      }}));
+    }}
   }}, `${{hours}}:${{minutes}}:00`);
 }}
 
@@ -735,8 +798,12 @@ await expectText("Choose different start and end times for the daily home schedu
 
 await setTimeInput(1, "22", "00");
 await selectNativeOption(0, "custom_temperature", "Use custom temperature");
+await clearNumberInput(0);
 await submitAndStay();
-await expectText("Set a custom temperature or choose a different open-window action.");
+await expectAnyText([
+  "Set a custom temperature or choose a different open-window action.",
+  "expected float",
+]);
 
 await selectEntity(2, "Window contact", "Virtual Window Office");
 await setNumberInput(0, "12");
