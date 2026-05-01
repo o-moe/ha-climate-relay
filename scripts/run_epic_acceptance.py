@@ -48,6 +48,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run backend/API preparation only and skip the Playwright GUI step.",
     )
     parser.add_argument(
+        "--install-version",
+        default=None,
+        help=(
+            "Explicit Climate Relay version to install in Home Assistant. "
+            "Defaults to the documented acceptance version for the selected epic."
+        ),
+    )
+    parser.add_argument(
         "--artifact-dir",
         default=str(DEFAULT_ARTIFACT_DIR),
         help="Directory for GUI failure screenshots and browser diagnostics.",
@@ -590,7 +598,13 @@ await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
 }}""".strip()
 
 
-def _run_epic_1(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
+def _run_epic_1(
+    *,
+    base_url: str,
+    skip_gui: bool,
+    artifact_dir: Path,
+    install_version: str | None,
+) -> None:
     token = os.environ.get(TOKEN_ENV_VAR)
     if not token:
         raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
@@ -636,7 +650,7 @@ def _run_epic_1(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
                 "--base-url",
                 base_url,
                 "--install-version",
-                f"update.climaterelaycore_update={EPIC_1_ACCEPTANCE_VERSION}",
+                f"update.climaterelaycore_update={install_version or EPIC_1_ACCEPTANCE_VERSION}",
             ],
             "Prepare HA test instance",
         ),
@@ -706,7 +720,13 @@ def _run_epic_1(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
         )
 
 
-def _run_epic_2(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
+def _run_epic_2(
+    *,
+    base_url: str,
+    skip_gui: bool,
+    artifact_dir: Path,
+    install_version: str | None,
+) -> None:
     token = os.environ.get(TOKEN_ENV_VAR)
     if not token:
         raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
@@ -720,7 +740,7 @@ def _run_epic_2(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
                 "--base-url",
                 base_url,
                 "--install-version",
-                f"update.climaterelaycore_update={EPIC_2_ACCEPTANCE_VERSION}",
+                f"update.climaterelaycore_update={install_version or EPIC_2_ACCEPTANCE_VERSION}",
             ],
             "Prepare HA test instance",
         ),
@@ -842,12 +862,14 @@ def main() -> int:
             base_url=args.base_url,
             skip_gui=args.skip_gui,
             artifact_dir=artifact_dir,
+            install_version=args.install_version,
         )
     if args.epic == "2":
         _run_epic_2(
             base_url=args.base_url,
             skip_gui=args.skip_gui,
             artifact_dir=artifact_dir,
+            install_version=args.install_version,
         )
     print(f"[acceptance] Epic {args.epic} completed successfully.")
     return 0
