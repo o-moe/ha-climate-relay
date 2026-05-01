@@ -83,7 +83,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--expect-area-override-services",
         action="store_true",
-        help="Require the manual override services introduced in iteration 1.4.",
+        help="Require the Epic 1 manual override services.",
     )
     parser.add_argument(
         "--set-room-override-area-id",

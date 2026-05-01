@@ -91,95 +91,46 @@ The plan is prioritized by dependency and risk:
    work.
 6. Keep frontend work strictly dependent on backend-owned state and actions.
 
-## Epic 1: Vertical foundation slices
+## Epic 1: Foundation complete
 
-Goal: establish the product foundation through increments that already create
-observable value in Home Assistant, instead of delivering technical groundwork
-in isolation.
+Goal: establish the product foundation through a tested, installable Home
+Assistant baseline with one area-bound regulation profile.
 
-### Increment 1.1: Installable integration with global controls and diagnostics
+Scope:
 
-- Scope: deliver an installable integration baseline with global configuration,
-  global mode handling, Home Assistant logging, optional verbose/debug mode,
-  a global simulation-mode option, one user-visible global control surface in
-  HA, and a repository layout that can be installed as an `Integration`-type
-  HACS custom repository.
-- User value: the product can be installed, configured, operated at global
-  level, and diagnosed in a real HA instance.
-- Product-owner acceptance: the integration can be added once, exposes the
-  agreed global mode control, honors configured global defaults, produces
-  readable logs during normal and debug operation, exposes the simulation-mode
-  switch with the documented default, and can be installed via HACS as a custom
-  repository.
-- Requirements: `FR-001`, `FR-002`, `FR-022` to `FR-029`, `FR-048`, `FR-049`,
-  `FR-068`, `FR-082`, `FR-101`, `FR-102`, `QR-011`, `QR-012`, `QR-041`,
-  `QR-050`, `QR-060`, `QR-070`, `QR-071`.
-- Verification focus: `V-UT-001`, `V-UT-002`, `V-IT-001`, `V-IT-002`,
-  `V-IT-003`, `V-AT-005`, `V-AT-006`, `V-DR-002`, `V-DR-004`.
-- Exit criteria: the integration delivers a manually testable HA baseline with
-  global configuration, global mode control, simulation-mode configuration, and
-  operator diagnostics.
+- installable integration and HACS-compatible repository layout
+- global configuration, global mode handling, diagnostics, and simulation mode
+- one primary-climate-anchored regulation profile with HA area semantics
+- one integration-owned area climate entity with sparse explanatory attributes
+- home and away targets, daily local schedule window, next-change explanation,
+  and fallback behavior
+- central effective-regulation resolver for manual override, schedule/global
+  mode, and fallback priority
+- manual area override creation, replacement, clearing, and termination
+  semantics through Home Assistant services
+- hardened actuation retry behavior, service-boundary validation, timer
+  cleanup, and time-semantics coverage
 
-### Increment 1.2: Single-area regulation foundation with climate entity and target model
+User value: the product can be installed, configured, operated, diagnosed, and
+accepted in a real Home Assistant instance for one area-bound regulation
+profile.
 
-- Scope: deliver the first area-centric slice with one regulation profile
-  anchored to one primary Home Assistant `climate` entity, one area-level
-  `climate` entity, inherited area placement, area home and away targets, and
-  minimal explanatory attributes.
-- User value: one real Home Assistant area can be represented and inspected in
-  HA through the intended regulation model without inventing a parallel house
-  structure.
-- Product-owner acceptance: a configured area appears as one integration-owned
-  climate entity with understandable target behavior, sparse explanatory
-  context, and an explicit relationship to the existing HA area model.
-- Requirements: `FR-010` to `FR-014`, `FR-017` to `FR-021`, `FR-072`,
-  `FR-075`, `FR-080`, `FR-081`, `FR-084` to `FR-087`, `FR-090`, `FR-097`,
-  `FR-098`, `QR-010`, `QR-011`, `QR-012`, `QR-040`, `QR-050`.
-- Verification focus: `V-UT-004`, `V-UT-007`, `V-IT-002`, `V-IT-005`,
-  `V-IT-006`, `V-AT-004`, `V-DR-001`, `V-DR-003`.
-- Exit criteria: one primary-climate-anchored regulation profile can be
-  configured and
-  observed end-to-end in HA with clear area semantics and visible degradation
-  signaling.
+Product-owner acceptance: one configured area can be controlled by global mode,
+schedule, and manual override services; the area climate entity explains active
+context, next schedule change, override end time, and degradation state; and
+simulation mode allows safe observation without real device writes.
 
-### Increment 1.3: Single-area schedule and effective target baseline
+Requirements: `FR-001`, `FR-002`, `FR-010` to `FR-029`, `FR-040` to `FR-056`,
+`FR-065`, `FR-066`, `FR-068` to `FR-076`, `FR-080` to `FR-104`, `QR-010` to
+`QR-012`, `QR-020`, `QR-021`, `QR-030`, `QR-040`, `QR-041`, `QR-050`, `QR-051`,
+`QR-060`, `QR-061`, `QR-070`, and `QR-071`.
 
-- Scope: add schedule modeling, next-change calculation, and effective target
-  resolution for one primary-climate-anchored regulation profile using global
-  mode, schedule, and fallback, together
-  with simulation-mode suppression of actual device writes.
-- User value: one area now behaves automatically over time and exposes why its
-  target is currently active, while users can verify the intended control
-  behavior safely before allowing device actuation.
-- Product-owner acceptance: the area target changes predictably according to
-  schedule and global mode, HA shows the active control context plus next
-  change, and simulation mode allows observing intended actions without sending
-  writes to real devices.
-- Requirements: `FR-015`, `FR-050` to `FR-056`, `FR-065`, `FR-086` to
-  `FR-089`, `FR-095`, `FR-096`, `FR-103`, `FR-104`, `QR-020`, `QR-021`,
-  `QR-030`, `QR-041`, `QR-051`, `QR-061`.
-- Verification focus: `V-UT-004`, `V-UT-006`, `V-UT-007`, `V-IT-006`,
-  `V-IT-007`, `V-AT-003`, `V-AT-004`, `V-AT-005`, `V-AT-006`, `V-DR-001`,
-  `V-DR-003`.
-- Exit criteria: one area delivers predictable scheduled behavior and
-  explanatory timing data in HA, and simulation mode suppresses real actuation
-  while logging intended control actions.
+Verification focus: `V-UT-001` to `V-UT-008`, `V-IT-001` to `V-IT-007`,
+`V-AT-002` to `V-AT-006`, and `V-DR-001` to `V-DR-004`.
 
-### Increment 1.4: Single-area manual control baseline
-
-- Scope: add manual area override creation, replacement, clearing, termination
-  semantics, and area-scoped runtime actions for one regulation profile.
-- User value: the user can override one area manually in HA and understand when
-  the override will end.
-- Product-owner acceptance: one area override can be set, replaced, and cleared
-  through HA-facing controls, and temporary overrides display their end time.
-- Requirements: `FR-016`, `FR-040` to `FR-049`, `FR-066`, `FR-070`, `FR-071`,
-  `FR-073`, `FR-074`, `FR-076`, `FR-089`, `FR-091` to `FR-094`, `QR-050`,
-  `QR-051`, `QR-060`.
-- Verification focus: `V-UT-005`, `V-UT-008`, `V-IT-003`, `V-IT-006`,
-  `V-AT-002`, `V-AT-004`, `V-DR-002`, `V-DR-003`.
-- Exit criteria: one-area manual intervention works end-to-end in HA and is
-  product-owner testable as a useful standalone capability.
+Exit criteria: the Epic 1 stable release candidate passes local quality gates,
+the Home Assistant API and GUI acceptance suite, and the stable release
+boundary documented in [epic-1.md](./epic-1.md).
 
 ## Epic 2: Core automation completion
 
@@ -323,7 +274,7 @@ Distribution rule for Epic 5:
 
 The recommended release path is:
 
-1. `M1 Foundation complete`: Increment 1.1, 1.2, 1.3, 1.4
+1. `M1 Foundation complete`: Epic 1
 2. `M2 Core automation complete`: Increment 2.1, 2.2, 2.3
 3. `M3 Reliable runtime`: Increment 3.1, 3.2
 4. `M4 Home Assistant usable baseline`: Increment 4.1, 4.2

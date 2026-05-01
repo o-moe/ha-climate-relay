@@ -86,7 +86,7 @@ Typical checks:
 Strengths:
 
 - much faster and more stable than UI automation
-- ideal for regression smoke tests after each iteration
+- ideal for regression smoke tests after each development increment
 - good fit for backend-first verification
 
 Weaknesses:
@@ -126,7 +126,7 @@ Weaknesses:
 
 Assessment:
 This should exist, but only as a thin top layer above API-driven smoke tests.
-It is the wrong primary tool for every iteration check.
+It is the wrong primary tool for every increment check.
 
 ### Option 4: Disposable end-to-end HA environment
 
@@ -153,7 +153,7 @@ Good medium-term target, but not the first move.
 
 Use a two-layer approach:
 
-1. Make API-driven HA smoke tests the default acceptance path for iteration work.
+1. Make API-driven HA smoke tests the default acceptance path for increment work.
 2. Add a very small browser-driven checklist only for UI-specific behaviors.
 
 This gives the best return:
@@ -191,24 +191,23 @@ uv run python scripts/ha_prepare_test_instance.py
 uv run python scripts/ha_smoke_test.py
 ```
 
-Dedicated fixture preparation for the iteration-1.2 no-area validation path:
+Dedicated fixture preparation for the Epic 1 no-area validation path:
 
 ```bash
 export HOME_ASSISTANT_TOKEN='<long-lived-token>'
 uv run python scripts/ha_prepare_no_area_fixture.py
 ```
 
-Single-command iteration-1.2 regression run:
+Single-command Epic 1 regression run:
 
 ```bash
 export HOME_ASSISTANT_TOKEN='<long-lived-token>'
-uv run python scripts/run_iteration_acceptance.py --iteration 1.2
+uv run python scripts/run_epic_acceptance.py --epic 1
 ```
 
-The runner installs the iteration-specific Climate Relay version explicitly.
-For iteration `1.2`, that version is `v0.1.0-alpha.8`; the runner must not rely
-on HACS `latest_version`, because HACS can report a commit-like version that is
-not the intended iteration build.
+The runner installs the intended Climate Relay version explicitly. It must not
+rely on HACS `latest_version`, because HACS can report a commit-like version
+that is not the intended build.
 
 Verified on 2026-04-25 against `http://haos-test.local:8123`:
 
@@ -224,9 +223,9 @@ Verified on 2026-04-25 against `http://haos-test.local:8123`:
   selecting `No Area Fixture` in the `Climate Relay` `Regulation Profile`
   form renders the inline validation
   `Assign the primary climate entity to a Home Assistant area first.`
-- `scripts/run_iteration_acceptance.py --iteration 1.2` is now the repo-local
-  entry point that chains HA preparation, backend smoke checks, dedicated
-  fixture setup, and the critical GUI regression path for iteration `1.2`
+- `scripts/run_epic_acceptance.py --epic 1` is the Epic 1 repo-local entry
+  point that chains HA preparation, backend smoke checks, dedicated fixture
+  setup, and the GUI regression path
 
 Verified on 2026-04-23 against `http://haos-test.local:8123`:
 
@@ -250,7 +249,7 @@ uv run python scripts/ha_smoke_test.py \
   --expect-fallback-temperature 20.0
 ```
 
-For later area-centric increments, tighten the room surface explicitly:
+For later area-centric epics, tighten the area surface explicitly:
 
 ```bash
 uv run python scripts/ha_smoke_test.py --expect-room-count 1
@@ -260,16 +259,20 @@ uv run python scripts/ha_smoke_test.py --expect-room-count 1
 
 - keep the browser checklist intentionally short and run it in Playwright
   Chromium
-- operationalize the iteration-specific suites as executable Playwright runs,
-  starting with the Climate Relay options flow:
+- keep GUI runner failures fatal and capture failure screenshots under
+  `artifacts/acceptance/`
+- operationalize epic-level suites as executable Playwright runs, starting with
+  the Climate Relay options flow:
   - open integration
   - open configure
   - verify expected fields render
   - verify non-happy-path validation
   - verify save and cancel paths
   - verify `Presence Control` surface in HA UI
+  - verify the manual override service/action surface and area entity
+    explanation
 
-Verified GUI/UX smoke coverage for iteration 1.1 in Playwright Chromium:
+Verified GUI/UX smoke coverage for Epic 1 in Playwright Chromium:
 
 1. Login and app-shell reachability
 2. Open `Climate Relay` integration detail page
@@ -304,18 +307,19 @@ The next implementation step should be authenticated API smoke testing against
 the dedicated HA instance, with browser automation added only for the narrow HA
 frontend behaviors that cannot be proven through the API.
 
-## Iteration Workflow
+## Epic Workflow
 
-For future iterations, the default acceptance path should be:
+For future epics, the default acceptance path should be:
 
 1. implement and verify the code change locally
 2. run `ha_prepare_test_instance.py`
 3. run `ha_smoke_test.py`
 4. run a narrow browser smoke suite for the user-visible HA surface changed in
-   that iteration
+   that epic
 
-This means GUI/UX acceptance should be created incrementally together with each
-iteration rather than postponed into a later manual-only phase.
+This means GUI/UX acceptance should be created incrementally during active
+development, then consolidated into epic-level release evidence at epic
+closure.
 
-The iteration-specific GUI suite files live under
+The GUI suite files live under
 [`docs/gui-smoke-suites/`](./gui-smoke-suites/README.md).

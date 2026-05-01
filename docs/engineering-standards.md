@@ -6,7 +6,7 @@ This document defines the non-negotiable engineering expectations for this repos
 
 ## Delivery contract
 
-- Every increment must be developed test-first.
+- Every increment inside an active epic must be developed test-first.
 - The first implementation artifact for every required behavior must be a
   failing automated test or executable specification.
 - An increment is not complete until all behavior in scope is covered by the
@@ -17,7 +17,7 @@ This document defines the non-negotiable engineering expectations for this repos
   updated together with the code and tests.
 - An increment with any user-visible effect is not final until `README.md` is
   updated with the current installation guidance, supported user workflow,
-  limitations, and iteration status relevant to that effect.
+  limitations, and status relevant to that effect.
 - `README.md` shall remain user-focused; developer-internal workflow,
   governance, and implementation guidance shall live outside `README.md`.
 - Release tags, GitHub releases, pre-releases, and temporary public test
@@ -26,7 +26,7 @@ This document defines the non-negotiable engineering expectations for this repos
   automated alpha and beta publication, including the manifest version and the
   current epic and iteration labels used in release titles.
 - Requirement-to-test traceability must remain current for every completed
-  increment.
+  increment and consolidated epic release boundary.
 - No alpha, beta, or stable release shall be published until the corresponding
   GitHub quality gates for the exact target commit are green.
 
@@ -113,14 +113,16 @@ This document defines the non-negotiable engineering expectations for this repos
   persistence; Python-side tests alone are not sufficient release evidence for
   those flows.
 - New Home Assistant GUI/UX behavior shall be delivered together with an
-  iteration-specific executable acceptance runner. The runner must prepare the
-  real HA test instance, install the intended build or release version, prepare
-  required fixtures, execute API smoke checks, and run the relevant Playwright
-  Chromium GUI checks.
+  executable acceptance runner. The runner must prepare the real HA test
+  instance, install the intended build or release version, prepare required
+  fixtures, execute API smoke checks, and run the relevant Playwright Chromium
+  GUI checks.
+- At epic closure, increment-level acceptance details shall be consolidated
+  into an epic-level smoke-suite document.
 - Manual HA acceptance may supplement the executable runner, but it shall not
   be the primary release evidence for user-visible increments once the behavior
   is automatable.
-- The iteration acceptance runner must fail loudly on browser automation errors
+- The acceptance runner must fail loudly on browser automation errors
   and must not treat Playwright-reported `### Error` output as success.
 
 ## Tooling baseline

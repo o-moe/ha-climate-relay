@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the documented Home Assistant acceptance workflow for one iteration."""
+"""Run the documented Home Assistant acceptance workflow for an epic."""
 
 from __future__ import annotations
 
@@ -17,10 +17,9 @@ from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
-ITERATION_1_2_VERSION = "v0.1.0-alpha.8"
-ITERATION_1_3_VERSION = "v0.1.0-alpha.19"
-ITERATION_1_4_VERSION = "v0.1.0-alpha.21"
+EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
 LOCAL_ENV_FILE = Path(".env.local")
+DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 
 
 class AcceptanceError(RuntimeError):
@@ -29,15 +28,13 @@ class AcceptanceError(RuntimeError):
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "Run the repository-local HA acceptance workflow for one documented iteration."
-        )
+        description="Run the repository-local HA acceptance workflow for one documented epic."
     )
     parser.add_argument(
-        "--iteration",
+        "--epic",
         required=True,
-        choices=("1.2", "1.3", "1.4"),
-        help="Iteration acceptance workflow to run.",
+        choices=("1",),
+        help="Epic acceptance workflow to run.",
     )
     parser.add_argument(
         "--base-url",
@@ -48,6 +45,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--skip-gui",
         action="store_true",
         help="Run backend/API preparation only and skip the Playwright GUI step.",
+    )
+    parser.add_argument(
+        "--artifact-dir",
+        default=str(DEFAULT_ARTIFACT_DIR),
+        help="Directory for GUI failure screenshots and browser diagnostics.",
     )
     return parser
 
@@ -118,7 +120,7 @@ def _find_config_entry_id(*, base_url: str, token: str, domain: str) -> str:
     return str(candidates[0]["entry_id"])
 
 
-def _prepare_iteration_1_3_profile(*, base_url: str, token: str) -> None:
+def _prepare_epic_1_profile(*, base_url: str, token: str) -> None:
     entry_id = _find_config_entry_id(
         base_url=base_url,
         token=token,
@@ -195,7 +197,32 @@ def _playwright_env() -> dict[str, str]:
     return env
 
 
-def _gui_regression_code(base_url: str) -> str:
+def _capture_gui_artifact(
+    *,
+    pwcli: str,
+    session: str,
+    env: dict[str, str],
+    artifact_dir: Path,
+    name: str,
+) -> None:
+    """Best-effort screenshot capture for a failed GUI acceptance step."""
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_path = artifact_dir / f"{name}-{session}.png"
+    code = (
+        "async () => {"
+        f"await page.screenshot({{path: {str(screenshot_path)!r}, fullPage: true}});"
+        f"console.log('Saved GUI failure screenshot: {screenshot_path}');"
+        "}"
+    )
+    subprocess.run(
+        [pwcli, f"-s={session}", "run-code", code],
+        env=env,
+        check=False,
+        text=True,
+    )
+
+
+def _gui_epic_1_validation_code(base_url: str) -> str:
     return f"""async () => {{
 const baseUrl = {base_url!r};
 
@@ -255,7 +282,7 @@ await expectText("Assign the primary climate entity to a Home Assistant area fir
 }}""".strip()
 
 
-def _gui_iteration_1_3_code(base_url: str) -> str:
+def _gui_epic_1_profile_save_code(base_url: str) -> str:
     return f"""async () => {{
 const baseUrl = {base_url!r};
 
@@ -314,176 +341,7 @@ await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
 }}""".strip()
 
 
-def _run_iteration_1_2(*, base_url: str, skip_gui: bool) -> None:
-    token = os.environ.get(TOKEN_ENV_VAR)
-    if not token:
-        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
-
-    env = os.environ.copy()
-    strict_smoke = [
-        sys.executable,
-        "scripts/ha_smoke_test.py",
-        "--expect-select-friendly-name",
-        "Climate Relay Presence Control",
-        "--expect-effective-presence",
-        "away",
-        "--expect-unknown-state-handling",
-        "away",
-        "--expect-simulation-mode",
-        "on",
-        "--expect-fallback-temperature",
-        "20.0",
-        "--base-url",
-        base_url,
-    ]
-
-    steps = [
-        (
-            [
-                sys.executable,
-                "scripts/ha_prepare_test_instance.py",
-                "--base-url",
-                base_url,
-                "--install-version",
-                f"update.climaterelaycore_update={ITERATION_1_2_VERSION}",
-            ],
-            "Prepare HA test instance",
-        ),
-        (strict_smoke, "Run authenticated HA smoke test"),
-        (
-            [
-                sys.executable,
-                "scripts/ha_prepare_no_area_fixture.py",
-                "--base-url",
-                base_url,
-            ],
-            "Prepare dedicated no-area fixture",
-        ),
-    ]
-    for command, description in steps:
-        _run_command(command, env=env, description=description)
-
-    if skip_gui:
-        return
-
-    pw_env = _playwright_env()
-    pwcli = pw_env["PWCLI"]
-    session = f"i12{os.getpid()}"
-    try:
-        _run_command(
-            [pwcli, f"-s={session}", "open", base_url],
-            env=pw_env,
-            description="Open Playwright browser session",
-        )
-        _run_command(
-            [pwcli, f"-s={session}", "run-code", _gui_regression_code(base_url)],
-            env=pw_env,
-            description="Run iteration 1.2 GUI regression",
-        )
-    finally:
-        subprocess.run(
-            [pwcli, f"-s={session}", "close"],
-            env=pw_env,
-            check=False,
-        )
-
-
-def _run_iteration_1_3(*, base_url: str, skip_gui: bool) -> None:
-    token = os.environ.get(TOKEN_ENV_VAR)
-    if not token:
-        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
-
-    env = os.environ.copy()
-    base_smoke = [
-        sys.executable,
-        "scripts/ha_smoke_test.py",
-        "--set-initial-mode",
-        "home",
-        "--expect-select-friendly-name",
-        "Climate Relay Presence Control",
-        "--expect-effective-presence",
-        "home",
-        "--expect-unknown-state-handling",
-        "away",
-        "--expect-simulation-mode",
-        "on",
-        "--expect-fallback-temperature",
-        "20.0",
-        "--base-url",
-        base_url,
-    ]
-    room_smoke = [
-        *base_smoke,
-        "--expect-room-count",
-        "1",
-        "--expect-room-next-change",
-    ]
-
-    steps = [
-        (
-            [
-                sys.executable,
-                "scripts/ha_prepare_test_instance.py",
-                "--base-url",
-                base_url,
-                "--install-version",
-                f"update.climaterelaycore_update={ITERATION_1_3_VERSION}",
-            ],
-            "Prepare HA test instance",
-        ),
-        (base_smoke, "Run authenticated HA base smoke test"),
-        (
-            [
-                sys.executable,
-                "scripts/ha_prepare_no_area_fixture.py",
-                "--base-url",
-                base_url,
-            ],
-            "Prepare dedicated no-area fixture",
-        ),
-    ]
-    for command, description in steps:
-        _run_command(command, env=env, description=description)
-
-    print("[acceptance] Prepare iteration 1.3 regulation profile")
-    _prepare_iteration_1_3_profile(base_url=base_url, token=token)
-
-    if skip_gui:
-        _run_command(
-            room_smoke,
-            env=env,
-            description="Run authenticated HA schedule smoke test",
-        )
-        return
-
-    pw_env = _playwright_env()
-    pwcli = pw_env["PWCLI"]
-    session = f"i13{os.getpid()}"
-    try:
-        _run_command(
-            [pwcli, f"-s={session}", "open", base_url],
-            env=pw_env,
-            description="Open Playwright browser session",
-        )
-        _run_command(
-            [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
-            env=pw_env,
-            description="Run iteration 1.3 GUI regression",
-        )
-        _run_command(
-            room_smoke,
-            env=env,
-            description="Run authenticated HA schedule smoke test",
-        )
-    finally:
-        subprocess.run(
-            [pwcli, f"-s={session}", "close"],
-            env=pw_env,
-            check=False,
-        )
-
-
-def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
+def _run_epic_1(*, base_url: str, skip_gui: bool, artifact_dir: Path) -> None:
     token = os.environ.get(TOKEN_ENV_VAR)
     if not token:
         raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
@@ -529,7 +387,7 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
                 "--base-url",
                 base_url,
                 "--install-version",
-                f"update.climaterelaycore_update={ITERATION_1_4_VERSION}",
+                f"update.climaterelaycore_update={EPIC_1_ACCEPTANCE_VERSION}",
             ],
             "Prepare HA test instance",
         ),
@@ -547,8 +405,8 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
     for command, description in steps:
         _run_command(command, env=env, description=description)
 
-    print("[acceptance] Prepare iteration 1.4 regulation profile")
-    _prepare_iteration_1_3_profile(base_url=base_url, token=token)
+    print("[acceptance] Prepare Epic 1 regulation profile")
+    _prepare_epic_1_profile(base_url=base_url, token=token)
 
     if skip_gui:
         _run_command(
@@ -560,7 +418,7 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
 
     pw_env = _playwright_env()
     pwcli = pw_env["PWCLI"]
-    session = f"i14{os.getpid()}"
+    session = f"e1{os.getpid()}"
     try:
         _run_command(
             [pwcli, f"-s={session}", "open", base_url],
@@ -568,15 +426,29 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
             description="Open Playwright browser session",
         )
         _run_command(
-            [pwcli, f"-s={session}", "run-code", _gui_iteration_1_3_code(base_url)],
+            [pwcli, f"-s={session}", "run-code", _gui_epic_1_validation_code(base_url)],
             env=pw_env,
-            description="Run iteration 1.4 configuration GUI regression",
+            description="Run Epic 1 validation GUI regression",
+        )
+        _run_command(
+            [pwcli, f"-s={session}", "run-code", _gui_epic_1_profile_save_code(base_url)],
+            env=pw_env,
+            description="Run Epic 1 profile-save GUI regression",
         )
         _run_command(
             override_smoke,
             env=env,
             description="Run authenticated HA manual override smoke test",
         )
+    except AcceptanceError:
+        _capture_gui_artifact(
+            pwcli=pwcli,
+            session=session,
+            env=pw_env,
+            artifact_dir=artifact_dir,
+            name="epic-1",
+        )
+        raise
     finally:
         subprocess.run(
             [pwcli, f"-s={session}", "close"],
@@ -588,15 +460,14 @@ def _run_iteration_1_4(*, base_url: str, skip_gui: bool) -> None:
 def main() -> int:
     _load_local_env_file()
     args = _build_parser().parse_args()
-    if args.iteration == "1.2":
-        _run_iteration_1_2(base_url=args.base_url, skip_gui=args.skip_gui)
-    elif args.iteration == "1.3":
-        _run_iteration_1_3(base_url=args.base_url, skip_gui=args.skip_gui)
-    elif args.iteration == "1.4":
-        _run_iteration_1_4(base_url=args.base_url, skip_gui=args.skip_gui)
-    else:
-        raise AcceptanceError(f"Unsupported iteration {args.iteration!r}.")
-    print(f"[acceptance] Iteration {args.iteration} completed successfully.")
+    artifact_dir = Path(args.artifact_dir)
+    if args.epic == "1":
+        _run_epic_1(
+            base_url=args.base_url,
+            skip_gui=args.skip_gui,
+            artifact_dir=artifact_dir,
+        )
+    print(f"[acceptance] Epic {args.epic} completed successfully.")
     return 0
 
 

@@ -1,6 +1,6 @@
 # Climate Relay
 
-Climate Relay is a Home Assistant custom integration for room-centric
+Climate Relay is a Home Assistant custom integration for area-centric
 climate control.
 
 [![Open your Home Assistant instance and show the Climate Relay repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?category=integration&repository=ha-climate-relay&owner=o-moe)
@@ -123,13 +123,21 @@ updates. If you enable verbose logging in the options flow, it also logs the
 resolved effective presence context.
 
 If simulation mode is enabled, the integration still evaluates its control
-logic and logs the resulting room target decisions, but it suppresses the
+logic and logs the resulting area target decisions, but it suppresses the
 `climate.set_temperature` write that would otherwise be sent to the primary
 climate entity.
+
+Device writes are treated as confirmed only after Home Assistant accepts the
+underlying `climate.set_temperature` service call. If a write fails, the same
+target can be retried on the next evaluation instead of being permanently
+suppressed as already applied.
 
 ## Current Limitations
 
 - only one area-bound regulation profile is supported
+- global mode and manual override runtime state remain in memory and are
+  recomputed or cleared after restart; full durable runtime persistence is a
+  later epic concern
 - schedule editing is limited to one daily home window
 - manual overrides are service/action based; a dedicated dashboard control is not available yet
 - window automation is not available yet

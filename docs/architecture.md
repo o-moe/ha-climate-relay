@@ -49,6 +49,35 @@ The backend therefore owns rule evaluation, but it should attach that behavior
 to HA-native entities and house structure instead of inventing a second house
 model.
 
+## Epic 1 hardening decisions
+
+- Effective target selection is centralized in a pure domain resolver. The Home
+  Assistant climate entity consumes the resolver output for target temperature,
+  active context, next schedule change, and manual override end time.
+- The resolver preserves Epic 1 behavior and reserves an explicit
+  `window_priority_pending` placeholder for Epic 2. Window automation is not
+  exposed in Epic 1.
+- Actuation state is recorded only after a blocking
+  `climate.set_temperature` call succeeds. Failed writes are logged with entity,
+  target, and source context and remain retryable.
+- Global mode and manual override runtime state remain in memory for Epic 1.
+  Full durable runtime persistence is deliberately deferred to the persistence
+  epic because adding it here would broaden product behavior beyond hardening.
+
+## Future multi-profile configuration
+
+Runtime data structures already accept more than one regulation profile when
+configuration supplies them. The user-facing config and options flows remain
+single-profile in Epic 1.
+
+The future multi-profile model should add:
+
+- stable generated profile IDs that survive display-name and entity changes
+- add, edit, and remove operations for regulation profiles
+- explicit area/profile target selection for services
+- validation for duplicate area targeting and orphaned profiles
+- migration rules for existing single-profile entries
+
 ## Frontend role
 
 The frontend will eventually provide:

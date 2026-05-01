@@ -2,7 +2,8 @@
 
 ## Goal
 
-This document describes the rule model used to determine the effective room state.
+This document describes the rule model used to determine the effective area
+state.
 
 ## Core concepts
 
@@ -16,9 +17,9 @@ Supported values:
 
 In `auto`, the effective global state is derived from configured Home Assistant `person` entities.
 
-### Room-level contexts
+### Area-level contexts
 
-The backend distinguishes these room-level contexts:
+The backend distinguishes these area-level contexts:
 
 - scheduled behavior
 - manual override
@@ -26,7 +27,8 @@ The backend distinguishes these room-level contexts:
 
 ### Effective target
 
-The effective target is the resolved state that will be applied to the room's climate entity. It may contain:
+The effective target is the resolved state that will be applied to the area's
+climate entity. It may contain:
 
 - an HVAC mode
 - a preset mode
@@ -50,11 +52,12 @@ The schedule domain model also validates the planned broader layouts:
 
 Priority order:
 
-1. window override
-2. manual room override
-3. effective global mode
-4. room schedule
-5. fallback state
+1. manual area override
+2. effective global mode and area schedule
+3. fallback state
+
+The domain resolver contains an explicit window-priority placeholder for Epic 2,
+but Epic 1 does not enable window automation as user-facing behavior.
 
 ## Window override
 
@@ -69,9 +72,9 @@ When the window closes:
 1. clear window override
 2. restore the last valid room state
 
-## Manual room override
+## Manual area override
 
-Manual room overrides are created through backend services or future UI actions.
+Manual area overrides are created through backend services or future UI actions.
 
 Termination options:
 

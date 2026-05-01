@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
@@ -16,7 +17,7 @@ from .const import (
     SERVICE_SET_AREA_OVERRIDE,
     SERVICE_SET_GLOBAL_MODE,
 )
-from .domain import GlobalMode
+from .domain import GlobalMode, OverrideTerminationType
 from .runtime import GlobalRuntime, build_global_config, build_room_configs
 
 _LOGGER = logging.getLogger(__name__)
@@ -128,14 +129,25 @@ async def _async_handle_set_area_override(service_call: ServiceCall) -> None:
     if runtime is None:
         return
 
-    await runtime.async_set_area_override(
-        area_id=service_call.data["area_id"],
-        target_temperature=service_call.data["target_temperature"],
-        termination_type=service_call.data["termination_type"],
-        duration_minutes=service_call.data.get("duration_minutes"),
-        until_time=service_call.data.get("until_time"),
-        source="service",
+    termination_type: OverrideTerminationType = service_call.data["termination_type"]
+    duration_minutes = service_call.data.get("duration_minutes")
+    until_time = service_call.data.get("until_time")
+    _validate_override_termination(
+        termination_type,
+        duration_minutes=duration_minutes,
+        until_time=until_time,
     )
+    try:
+        await runtime.async_set_area_override(
+            area_id=service_call.data["area_id"],
+            target_temperature=service_call.data["target_temperature"],
+            termination_type=termination_type,
+            duration_minutes=duration_minutes,
+            until_time=until_time,
+            source="service",
+        )
+    except ValueError as err:
+        raise HomeAssistantError(str(err)) from err
 
 
 async def _async_handle_clear_area_override(service_call: ServiceCall) -> None:
@@ -144,10 +156,13 @@ async def _async_handle_clear_area_override(service_call: ServiceCall) -> None:
     if runtime is None:
         return
 
-    await runtime.async_clear_area_override(
-        area_id=service_call.data["area_id"],
-        source="service",
-    )
+    try:
+        await runtime.async_clear_area_override(
+            area_id=service_call.data["area_id"],
+            source="service",
+        )
+    except ValueError as err:
+        raise HomeAssistantError(str(err)) from err
 
 
 def _first_runtime(hass: HomeAssistant) -> GlobalRuntime | None:
@@ -156,6 +171,33 @@ def _first_runtime(hass: HomeAssistant) -> GlobalRuntime | None:
         return None
     entry_data = next(iter(entries.values()))
     return entry_data["runtime"]
+
+
+def _validate_override_termination(
+    termination_type: OverrideTerminationType,
+    *,
+    duration_minutes: int | None,
+    until_time: str | None,
+) -> None:
+    """Validate service-level manual-override termination payloads."""
+    if termination_type == "duration":
+        if duration_minutes is None or duration_minutes <= 0:
+            raise HomeAssistantError("duration termination requires positive duration_minutes.")
+        if until_time is not None:
+            raise HomeAssistantError("duration termination does not accept until_time.")
+        return
+    if termination_type == "until_time":
+        if until_time is None:
+            raise HomeAssistantError("until_time termination requires until_time.")
+        if duration_minutes is not None:
+            raise HomeAssistantError("until_time termination does not accept duration_minutes.")
+        return
+    if termination_type in {"next_timeblock", "never"} and (
+        duration_minutes is not None or until_time is not None
+    ):
+        raise HomeAssistantError(
+            f"{termination_type} termination does not accept duration_minutes or until_time."
+        )
 
 
 async def _async_handle_entry_update(hass: HomeAssistant, entry: ConfigEntry) -> None:

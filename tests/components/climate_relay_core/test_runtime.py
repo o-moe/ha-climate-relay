@@ -434,6 +434,79 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
         self.assertEqual(room_config.away_target.mode, "relative")
         self.assertEqual(room_config.schedule.layout, "all_days")
 
+    async def test_runtime_can_target_multiple_existing_profile_configs(self) -> None:
+        hass = Mock()
+        hass.states.get = Mock(return_value=SimpleNamespace(state="home"))
+        timezone = ZoneInfo("Europe/Berlin")
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            side_effect=[
+                AreaReference(area_id="office", area_name="Office"),
+                AreaReference(area_id="bedroom", area_name="Bedroom"),
+            ],
+        ):
+            room_configs = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.office",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        },
+                        {
+                            "primary_climate_entity_id": "climate.bedroom",
+                            "home_target_temperature": 19.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 16.0,
+                        },
+                    ]
+                },
+                hass=hass,
+            )
+        runtime = GlobalRuntime(hass, build_global_config({}, {}), room_configs)
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            office_override = await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=22.0,
+                termination_type="never",
+                source="test",
+            )
+            bedroom_override = await runtime.async_set_area_override(
+                area_id="climate_bedroom",
+                target_temperature=18.5,
+                termination_type="never",
+                source="test",
+            )
+
+        self.assertEqual(
+            runtime.manual_override_for_profile(room_configs[0].profile_id),
+            office_override,
+        )
+        self.assertEqual(
+            runtime.manual_override_for_profile(room_configs[1].profile_id),
+            bedroom_override,
+        )
+
+        await runtime.async_clear_area_override(area_id="climate.office", source="test")
+
+        self.assertIsNone(runtime.manual_override_for_profile(room_configs[0].profile_id))
+        self.assertEqual(
+            runtime.manual_override_for_profile(room_configs[1].profile_id),
+            bedroom_override,
+        )
+
     async def test_build_room_configs_uses_default_target_type_and_optional_entities(self) -> None:
         (room_config,) = build_room_configs(
             {},

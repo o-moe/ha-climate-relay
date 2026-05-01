@@ -35,7 +35,7 @@ uv run python -m build
 
 ## Quality Gates
 
-Every backend iteration is expected to satisfy the same checks locally and in
+Every backend increment is expected to satisfy the same checks locally and in
 CI:
 
 - formatting
@@ -47,7 +47,7 @@ CI:
 ## Documentation Responsibilities
 
 - `README.md` is reserved for user-focused documentation.
-- Every completed iteration must update `README.md` when the user-visible
+- Every completed increment must update `README.md` when the user-visible
   installation flow, operating flow, limitations, or supported features change.
 - Developer-internal workflow, governance, and implementation material belongs
   in `docs/` and `CONTRIBUTING.md`.
@@ -63,10 +63,9 @@ CI:
 - Published versions and test channels follow [release-policy.md](./release-policy.md).
 - The release version is taken from
   `custom_components/climate_relay_core/manifest.json`.
-- Stable versions are epic-scoped; iteration builds reuse that target version
-  with alpha and beta suffixes.
-- The release title epic and iteration labels are taken from
-  `.github/release-plan.json`.
+- Stable versions are epic-scoped; pre-release test builds reuse that target
+  version with alpha and beta suffixes.
+- The release title epic label is taken from `.github/release-plan.json`.
 
 ## Release Readiness Checklist
 
@@ -82,11 +81,13 @@ Before cutting any alpha, beta, or stable release, verify all of the following:
 - the integration can be installed or upgraded in a real HA instance
 - newly introduced config or options flows can be opened, saved, and re-opened
   without frontend errors
+- GUI acceptance failures from `scripts/run_epic_acceptance.py` produce a
+  non-zero exit and attempt to write screenshots under `artifacts/acceptance/`
 
-## Iteration 1.1 Lessons
+## Epic 1 Lessons
 
-The first vertical slice exposed several Home Assistant-specific failure modes
-that future increments should proactively guard against:
+The first epic exposed several Home Assistant-specific failure modes that
+future epics should proactively guard against:
 
 - HACS repository pages render the published branch or release README, so user
   documentation must be correct on the actually distributed ref, not only on a
@@ -109,6 +110,16 @@ that future increments should proactively guard against:
 - User-facing naming needs to be reviewed in the real HA UI, not only in code
   and tests.
 
+- Keep rule priority in pure domain code. The climate entity should adapt Home
+  Assistant state and service calls, not reimplement target selection.
+- Treat Home Assistant service-call success as the actuation boundary. A target
+  is considered applied only after the blocking service call returns.
+- Public service handlers should raise `HomeAssistantError` with operator-facing
+  messages for invalid area/profile references and invalid override termination
+  payloads.
+- Timer rescheduling should replace the active callback without accumulating
+  stale removal hooks.
+
 ## Automation Opportunities
 
 - The current test instance already supports reliable manual smoke testing.
@@ -122,6 +133,7 @@ that future increments should proactively guard against:
 ## Documentation Map
 
 - User entry point: [README.md](../README.md)
+- Epic 1 summary: [epic-1.md](./epic-1.md)
 - Discovery: [discovery.md](./discovery.md)
 - Requirements: [requirements.md](./requirements.md)
 - Verification Matrix: [verification-matrix.md](./verification-matrix.md)

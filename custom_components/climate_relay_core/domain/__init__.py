@@ -8,6 +8,7 @@ from .modes import (
     resolve_presence_mode,
 )
 from .overrides import ManualOverride, OverrideTerminationType, build_manual_override
+from .resolver import RegulationResolution, resolve_regulation_state
 from .rooms import resolve_room_target
 from .schedules import (
     RoomSchedule,
@@ -26,6 +27,7 @@ __all__ = [
     "GlobalMode",
     "ManualOverride",
     "OverrideTerminationType",
+    "RegulationResolution",
     "RoomSchedule",
     "RoomTarget",
     "ScheduleBlock",
@@ -37,6 +39,7 @@ __all__ = [
     "evaluate_schedule",
     "resolve_room_target",
     "resolve_presence_mode",
+    "resolve_regulation_state",
     "resolve_window_action",
     "validate_schedule",
 ]

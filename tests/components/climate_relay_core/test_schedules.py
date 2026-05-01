@@ -97,3 +97,57 @@ class ScheduleTests(TestCase):
     def test_daily_home_window_rejects_equal_boundaries(self) -> None:
         with self.assertRaisesRegex(ValueError, "must be different"):
             build_daily_home_window_schedule(time(6), time(6))
+
+    def test_overnight_home_window_crosses_day_boundary(self) -> None:
+        timezone = ZoneInfo("Europe/Berlin")
+        schedule = build_daily_home_window_schedule(time(22, 0), time(6, 0))
+
+        late_evening = evaluate_schedule(
+            schedule,
+            datetime(2026, 4, 30, 23, 30, tzinfo=timezone),
+            timezone,
+        )
+        midday = evaluate_schedule(
+            schedule,
+            datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            timezone,
+        )
+
+        self.assertEqual(late_evening.target, "home")
+        self.assertEqual(
+            late_evening.next_change_at,
+            datetime(2026, 5, 1, 6, 0, tzinfo=timezone),
+        )
+        self.assertEqual(midday.target, "away")
+        self.assertEqual(
+            midday.next_change_at,
+            datetime(2026, 4, 30, 22, 0, tzinfo=timezone),
+        )
+
+    def test_schedule_next_change_uses_local_dst_forward_offset(self) -> None:
+        timezone = ZoneInfo("Europe/Berlin")
+        schedule = build_daily_home_window_schedule(time(1, 30), time(3, 30))
+
+        result = evaluate_schedule(
+            schedule,
+            datetime(2026, 3, 29, 1, 45, tzinfo=timezone),
+            timezone,
+        )
+
+        self.assertEqual(result.target, "home")
+        self.assertEqual(result.next_change_at, datetime(2026, 3, 29, 3, 30, tzinfo=timezone))
+        self.assertEqual(result.next_change_at.utcoffset().total_seconds(), 7200)
+
+    def test_schedule_next_change_uses_local_dst_backward_offset(self) -> None:
+        timezone = ZoneInfo("Europe/Berlin")
+        schedule = build_daily_home_window_schedule(time(1, 30), time(3, 30))
+
+        result = evaluate_schedule(
+            schedule,
+            datetime(2026, 10, 25, 1, 45, tzinfo=timezone),
+            timezone,
+        )
+
+        self.assertEqual(result.target, "home")
+        self.assertEqual(result.next_change_at, datetime(2026, 10, 25, 3, 30, tzinfo=timezone))
+        self.assertEqual(result.next_change_at.utcoffset().total_seconds(), 3600)
