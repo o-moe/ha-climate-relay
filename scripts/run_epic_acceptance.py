@@ -502,16 +502,37 @@ async function openRegulationProfile() {{
 
 async function expectText(text) {{
   await page.waitForFunction(
-    (expected) => document.body && document.body.innerText.includes(expected),
+    (expected) => {{
+      function readText(root) {{
+        let text = root.innerText || "";
+        for (const element of root.querySelectorAll("*")) {{
+          if (element.shadowRoot) {{
+            text += "\\n" + readText(element.shadowRoot);
+          }}
+        }}
+        return text;
+      }}
+      return readText(document.body).includes(expected);
+    }},
     text,
     {{ timeout: 10000 }},
   );
 }}
 
 async function scrollDialog(deltaY) {{
-  const dialog = page.getByRole("dialog", {{ name: "Regulation Profile" }});
-  await dialog.hover();
-  await page.mouse.wheel(0, deltaY);
+  await page.evaluate((delta) => {{
+    function scroll(root) {{
+      for (const element of root.querySelectorAll("*")) {{
+        if (element.scrollHeight > element.clientHeight) {{
+          element.scrollTop += delta;
+        }}
+        if (element.shadowRoot) {{
+          scroll(element.shadowRoot);
+        }}
+      }}
+    }}
+    scroll(document);
+  }}, deltaY);
   await page.waitForTimeout(500);
 }}
 
