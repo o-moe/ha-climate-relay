@@ -529,7 +529,10 @@ def _build_options_schema(values: dict[str, Any], *, include_reset_time: bool) -
             default=values[CONF_UNKNOWN_STATE_HANDLING],
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=["away", "home"],
+                options=[
+                    {"value": "away", "label": "Treat as away"},
+                    {"value": "home", "label": "Treat as home"},
+                ],
                 sort=False,
             )
         ),
@@ -608,10 +611,13 @@ def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        "off",
-                        "frost_protection",
-                        "minimum_temperature",
-                        "custom_temperature",
+                        {"value": "off", "label": "Turn off if supported"},
+                        {
+                            "value": "frost_protection",
+                            "label": "Use frost protection if supported",
+                        },
+                        {"value": "minimum_temperature", "label": "Use minimum temperature"},
+                        {"value": "custom_temperature", "label": "Use custom temperature"},
                     ],
                     sort=False,
                 )
@@ -655,7 +661,10 @@ def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
                 CONF_AWAY_TARGET_TYPE,
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=["absolute", "relative"],
+                    options=[
+                        {"value": "absolute", "label": "Absolute temperature"},
+                        {"value": "relative", "label": "Relative delta"},
+                    ],
                     sort=False,
                 )
             ),

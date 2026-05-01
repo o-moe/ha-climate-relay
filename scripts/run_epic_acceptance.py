@@ -378,7 +378,11 @@ async function clearPrimaryClimate() {{
 }}
 
 async function expectText(text) {{
-  await page.getByText(text, {{ exact: true }}).waitFor({{ timeout: 10000 }});
+  await page.waitForFunction(
+    (expected) => document.body && document.body.innerText.includes(expected),
+    text,
+    {{ timeout: 10000 }},
+  );
 }}
 
 async function selectPrimaryClimate(name) {{
@@ -489,7 +493,11 @@ async function openRegulationProfile() {{
 }}
 
 async function expectText(text) {{
-  await page.getByText(text, {{ exact: true }}).waitFor({{ timeout: 10000 }});
+  await page.waitForFunction(
+    (expected) => document.body && document.body.innerText.includes(expected),
+    text,
+    {{ timeout: 10000 }},
+  );
 }}
 
 async function clearEntitySelector(selectorIndex) {{
