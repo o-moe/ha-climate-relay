@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.1"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.6"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 
@@ -450,8 +450,20 @@ async function selectPrimaryClimate(name) {{
 
 async function setTimeInput(selectorIndex, hours, minutes) {{
   const selector = page.locator("ha-selector-time").nth(selectorIndex);
-  await selector.locator("input[name='hours']").fill(hours);
-  await selector.locator("input[name='minutes']").fill(minutes);
+  for (const [name, value] of [["hours", hours], ["minutes", minutes]]) {{
+    const input = selector.locator(`input[name='${{name}}']`);
+    await input.fill(value);
+    await input.dispatchEvent("input");
+    await input.dispatchEvent("change");
+  }}
+  await selector.evaluate((element, value) => {{
+    element.value = value;
+    element.dispatchEvent(new CustomEvent("value-changed", {{
+      bubbles: true,
+      composed: true,
+      detail: {{ value }},
+    }}));
+  }}, `${{hours}}:${{minutes}}:00`);
 }}
 
 await ensureLoggedIn();
@@ -501,39 +513,114 @@ async function openRegulationProfile() {{
 }}
 
 async function expectText(text) {{
-  await page.waitForFunction(
-    (expected) => {{
-      function readText(root) {{
-        let text = root.innerText || "";
+  await installBrowserHelpers();
+  const found = await page.waitForFunction(
+    (expected) => window.__climateRelayAcceptance.readText(document).includes(expected),
+    text,
+    {{ timeout: 10000 }},
+  ).catch(() => null);
+  if (!found) {{
+    const visibleText = await page.evaluate(() =>
+      window.__climateRelayAcceptance.readText(document).replace(/\\s+/g, " ").slice(0, 1600),
+    );
+    throw new Error(
+      `Timed out waiting for text: ${{text}}. Visible text excerpt: ${{visibleText}}`,
+    );
+  }}
+}}
+
+async function scrollDialog(deltaY, steps = 1) {{
+  await installBrowserHelpers();
+  await page.evaluate((delta) => {{
+    window.__climateRelayAcceptance.scrollAll(delta);
+  }}, deltaY);
+  for (let index = 0; index < steps; index += 1) {{
+    await page.mouse.wheel(0, deltaY);
+    await page.keyboard.press(deltaY > 0 ? "PageDown" : "PageUp");
+    await page.waitForTimeout(200);
+  }}
+  await page.evaluate((delta) => {{
+    window.__climateRelayAcceptance.scrollAll(delta);
+  }}, deltaY);
+  await page.waitForTimeout(500);
+}}
+
+async function revealText(text) {{
+  await installBrowserHelpers();
+  for (let attempt = 0; attempt < 8; attempt += 1) {{
+    if (await page.getByText(text, {{ exact: false }}).first().isVisible().catch(() => false)) {{
+      return;
+    }}
+    if (await page.evaluate((expected) =>
+      window.__climateRelayAcceptance.readText(document).includes(expected),
+      text,
+    )) {{
+      await scrollDialog(500, 1);
+    }} else {{
+      await page.waitForTimeout(250);
+    }}
+  }}
+  await expectText(text);
+  throw new Error(`Text exists but was not visibly reachable in the options dialog: ${{text}}`);
+}}
+
+async function installBrowserHelpers() {{
+  await page.evaluate(() => {{
+    window.__climateRelayAcceptance = {{
+      readText(root) {{
+        let text = root.innerText || root.textContent || "";
         for (const element of root.querySelectorAll("*")) {{
           if (element.shadowRoot) {{
-            text += "\\n" + readText(element.shadowRoot);
+            text += "\\n" + this.readText(element.shadowRoot);
           }}
         }}
         return text;
-      }}
-      return readText(document.body).includes(expected);
-    }},
-    text,
-    {{ timeout: 10000 }},
-  );
-}}
-
-async function scrollDialog(deltaY) {{
-  await page.evaluate((delta) => {{
-    function scroll(root) {{
-      for (const element of root.querySelectorAll("*")) {{
-        if (element.scrollHeight > element.clientHeight) {{
-          element.scrollTop += delta;
+      }},
+      scrollAll(delta) {{
+        function scroll(root) {{
+          for (const element of root.querySelectorAll("*")) {{
+            if (element.scrollHeight > element.clientHeight) {{
+              element.scrollTop += delta;
+            }}
+            const style = getComputedStyle(element);
+            const isScrollable = style.overflowY === "auto" || style.overflowY === "scroll";
+            if (isScrollable && element.clientHeight) {{
+              element.scrollTop += delta;
+            }}
+            if (element.shadowRoot) {{
+              scroll(element.shadowRoot);
+            }}
+          }}
         }}
-        if (element.shadowRoot) {{
-          scroll(element.shadowRoot);
+        scroll(document);
+      }},
+      setSelectorValue(localName, selectorIndex, optionLabel, value) {{
+        const matches = [];
+        function walk(root) {{
+          for (const element of root.querySelectorAll("*")) {{
+            if (element.localName === localName) {{
+              matches.push(element);
+            }}
+            if (element.shadowRoot) {{
+              walk(element.shadowRoot);
+            }}
+          }}
         }}
-      }}
-    }}
-    scroll(document);
-  }}, deltaY);
-  await page.waitForTimeout(500);
+        walk(document);
+        const element = matches.find((match) => this.readText(match).includes(optionLabel))
+          || matches[selectorIndex];
+        if (!element) {{
+          throw new Error(`Missing selector host ${{localName}}[${{selectorIndex}}]`);
+        }}
+        element.value = value;
+        element.dispatchEvent(new CustomEvent("value-changed", {{
+          bubbles: true,
+          composed: true,
+          detail: {{ value }},
+        }}));
+      }},
+    }};
+  }});
 }}
 
 async function clearEntitySelector(selectorIndex) {{
@@ -558,6 +645,22 @@ async function selectNativeOption(selectorIndex, optionValue, optionLabel) {{
     await nativeSelect.selectOption(optionValue);
     return;
   }}
+  const visibleOption = page.getByText(optionLabel, {{ exact: true }}).first();
+  if (await visibleOption.isVisible().catch(() => false)) {{
+    await visibleOption.click({{ timeout: 5000 }}).catch(async () => {{
+      await visibleOption.evaluate((element) => element.click());
+    }});
+    await page.evaluate(
+      ([index, label, value]) => window.__climateRelayAcceptance.setSelectorValue(
+        "ha-selector-select",
+        index,
+        label,
+        value,
+      ),
+      [selectorIndex, optionLabel, optionValue],
+    );
+    return;
+  }}
   await selector.locator("mwc-select, ha-select").first().click();
   await page.getByText(optionLabel, {{ exact: true }}).click();
 }}
@@ -566,13 +669,35 @@ async function setNumberInput(selectorIndex, value) {{
   const selector = page.locator("ha-selector-number").nth(selectorIndex);
   const input = selector.locator("input").first();
   await input.fill(String(value));
+  await input.dispatchEvent("input");
   await input.dispatchEvent("change");
+  await selector.evaluate((element, value) => {{
+    const numericValue = Number(value);
+    element.value = Number.isNaN(numericValue) ? value : numericValue;
+    element.dispatchEvent(new CustomEvent("value-changed", {{
+      bubbles: true,
+      composed: true,
+      detail: {{ value: element.value }},
+    }}));
+  }}, String(value));
 }}
 
 async function setTimeInput(selectorIndex, hours, minutes) {{
   const selector = page.locator("ha-selector-time").nth(selectorIndex);
-  await selector.locator("input[name='hours']").fill(hours);
-  await selector.locator("input[name='minutes']").fill(minutes);
+  for (const [name, value] of [["hours", hours], ["minutes", minutes]]) {{
+    const input = selector.locator(`input[name='${{name}}']`);
+    await input.fill(value);
+    await input.dispatchEvent("input");
+    await input.dispatchEvent("change");
+  }}
+  await selector.evaluate((element, value) => {{
+    element.value = value;
+    element.dispatchEvent(new CustomEvent("value-changed", {{
+      bubbles: true,
+      composed: true,
+      detail: {{ value }},
+    }}));
+  }}, `${{hours}}:${{minutes}}:00`);
 }}
 
 async function submitAndStay() {{
@@ -590,9 +715,8 @@ for (const text of [
 ]) {{
   await expectText(text);
 }}
-await scrollDialog(700);
-await expectText("Open-window delay");
-await scrollDialog(-700);
+await revealText("Open-window delay");
+await scrollDialog(-900, 2);
 
 await clearEntitySelector(0);
 await submitAndStay();
@@ -621,7 +745,9 @@ await setNumberInput(2, "20");
 await selectNativeOption(1, "absolute", "Absolute temperature");
 await setNumberInput(3, "17");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
-await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
+await expectText("Optionen wurden erfolgreich gespeichert.");
+await page.getByRole("button", {{ name: /Fertig|Done|Finish/ }}).click();
+await page.getByRole("button", {{ name: /Fertig|Done|Finish/ }}).waitFor({{
   timeout: 10000,
   state: "detached",
 }});
