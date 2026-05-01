@@ -64,7 +64,9 @@ Epic 2 contributes the following executable evidence:
   `tests/components/climate_relay_core/test_rules.py` and
   `tests/components/climate_relay_core/test_climate.py`; full Epic 2
   options-flow GUI regression and API open/close acceptance path prepared in
-  `scripts/run_epic_acceptance.py --epic 2`
+  `scripts/run_epic_acceptance.py --epic 2`; release acceptance passed on
+  2026-05-01 against `v0.2.0-alpha.7` on
+  `http://haos-test.local:8123`
 
 ## Verification method legend
 
