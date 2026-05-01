@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 from custom_components.climate_relay_core.domain import (
     ClimateCapabilities,
     EffectivePresence,
     EffectiveTarget,
     GlobalMode,
+    ManualOverride,
     RoomTarget,
     UnknownStateHandling,
     WindowActionType,
+    build_daily_home_window_schedule,
     resolve_presence_mode,
+    resolve_regulation_state,
     resolve_room_target,
     resolve_window_action,
 )
@@ -88,6 +93,94 @@ class ResolveRoomTargetTests(unittest.TestCase):
             away_target=RoomTarget(mode="relative", temperature=-2.5),
         )
         self.assertEqual(result, 18.5)
+
+
+class ResolveRegulationStateTests(unittest.TestCase):
+    """Test central area regulation priority resolution."""
+
+    def setUp(self) -> None:
+        self.timezone = ZoneInfo("Europe/Berlin")
+        self.home_target = RoomTarget(mode="absolute", temperature=21.0)
+        self.away_target = RoomTarget(mode="absolute", temperature=17.0)
+        self.schedule = build_daily_home_window_schedule(time(6), time(22))
+
+    def test_schedule_derived_target_exposes_next_change(self) -> None:
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.HOME,
+            manual_override=None,
+            primary_available=True,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 7, 0, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 21.0)
+        self.assertEqual(result.active_context, "schedule")
+        self.assertEqual(result.next_change_at, datetime(2026, 4, 30, 22, 0, tzinfo=self.timezone))
+
+    def test_away_mode_uses_away_target_without_next_change(self) -> None:
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.AWAY,
+            manual_override=None,
+            primary_available=True,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 7, 0, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 17.0)
+        self.assertEqual(result.active_context, "schedule")
+        self.assertIsNone(result.next_change_at)
+
+    def test_manual_override_precedes_schedule_and_fallback(self) -> None:
+        ends_at = datetime(2026, 4, 30, 8, 0, tzinfo=self.timezone)
+        override = ManualOverride(
+            profile_id="climate_living_room",
+            area_id="living_room",
+            target_temperature=23.0,
+            termination_type="until_time",
+            created_at=datetime(2026, 4, 30, 7, 0, tzinfo=self.timezone),
+            ends_at=ends_at,
+        )
+
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.HOME,
+            manual_override=override,
+            primary_available=False,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 7, 15, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 23.0)
+        self.assertEqual(result.active_context, "manual_override")
+        self.assertEqual(result.override_ends_at, ends_at)
+
+    def test_fallback_applies_when_primary_is_unavailable(self) -> None:
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.HOME,
+            manual_override=None,
+            primary_available=False,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 7, 0, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 16.0)
+        self.assertEqual(result.active_context, "fallback")
+        self.assertFalse(result.window_priority_pending)
 
 
 class ResolveWindowActionTests(unittest.TestCase):

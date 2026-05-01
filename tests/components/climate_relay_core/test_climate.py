@@ -261,8 +261,54 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             "climate",
             "set_temperature",
             {"entity_id": "climate.living_room", "temperature": 21.5},
-            blocking=False,
+            blocking=True,
         )
+        self.assertEqual(entity._last_applied_target_temperature, 21.5)
+
+    async def test_failed_target_write_can_retry_same_target(self) -> None:
+        entity = self._build_entity(
+            effective_presence=EffectivePresence.HOME,
+            primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
+        )
+        entity.hass.services.async_call.side_effect = [RuntimeError("boom"), None]
+
+        with (
+            self.assertLogs(climate_platform._LOGGER.name, level="ERROR") as logs,
+            self.assertRaisesRegex(RuntimeError, "boom"),
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(
+                    2026,
+                    4,
+                    29,
+                    12,
+                    0,
+                    tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+                ),
+            ),
+        ):
+            await entity._async_apply_effective_target(source="test")
+
+        self.assertIn("Failed to apply climate.set_temperature", logs.output[0])
+        self.assertIsNone(entity._last_applied_target_temperature)
+
+        with patch.object(
+            climate_platform.dt_util,
+            "now",
+            return_value=datetime(
+                2026,
+                4,
+                29,
+                12,
+                0,
+                tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+            ),
+        ):
+            await entity._async_apply_effective_target(source="retry")
+
+        self.assertEqual(entity.hass.services.async_call.await_count, 2)
+        self.assertEqual(entity._last_applied_target_temperature, 21.5)
 
     async def test_entity_suppresses_target_write_when_simulation_mode_is_enabled(self) -> None:
         entity = self._build_entity(
@@ -399,7 +445,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             entity._handle_runtime_update()
             entity._handle_source_state_change(None)
 
-        self.assertEqual(entity.async_on_remove.call_count, 4)
+        self.assertEqual(entity.async_on_remove.call_count, 3)
         track_state_change.assert_called_once()
         tracked_entities = track_state_change.call_args.args[1]
         self.assertEqual(
@@ -411,6 +457,47 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(entity.async_write_ha_state.call_count, 2)
+
+    async def test_rescheduling_replaces_callback_without_registering_extra_remove_hooks(
+        self,
+    ) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
+        )
+        first_cancel = Mock()
+        second_cancel = Mock()
+        entity.async_on_remove = Mock()
+
+        with (
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(
+                    2026,
+                    4,
+                    29,
+                    12,
+                    0,
+                    tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+                ),
+            ),
+            patch.object(
+                climate_platform,
+                "async_track_state_change_event",
+                return_value=lambda: None,
+            ),
+            patch.object(
+                climate_platform,
+                "async_track_point_in_utc_time",
+                side_effect=[first_cancel, second_cancel],
+            ),
+        ):
+            await entity.async_added_to_hass()
+            entity._schedule_next_update()
+
+        first_cancel.assert_called_once()
+        second_cancel.assert_not_called()
+        self.assertEqual(entity.async_on_remove.call_count, 3)
 
     async def test_is_unavailable_distinguishes_none_and_unknown_states(self) -> None:
         self.assertFalse(_is_unavailable(None))

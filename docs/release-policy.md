@@ -129,6 +129,10 @@ Examples:
   users.
 - `README.md` may mention that alpha or dev builds exist, but should not become
   a running release log.
+- At stable epic release time, temporary iteration and hardening notes should be
+  consolidated into durable epic-level documents. Historical implementation
+  sequence is not part of the stable user-facing release boundary unless it
+  affects migration or support.
 - Developer-oriented release procedures belong in `docs/`.
 
 ## Operator Discipline

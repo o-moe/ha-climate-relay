@@ -58,7 +58,7 @@ _LOGGER: Final = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class GlobalConfig:
-    """Global integration configuration for iteration 1.1."""
+    """Global integration configuration."""
 
     person_entity_ids: tuple[str, ...]
     unknown_state_handling: str

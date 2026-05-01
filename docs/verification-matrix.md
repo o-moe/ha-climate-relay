@@ -15,40 +15,45 @@ It complements the Software Requirements Specification in
 
 ## Current implementation evidence
 
-Iteration `1.1` currently contributes the following executable evidence:
+Epic 1 contributes the following executable evidence:
 
 - `V-UT-001`: `tests/components/climate_relay_core/test_config_flow.py`
-- `V-UT-002`: `tests/components/climate_relay_core/test_rules.py`, `tests/components/climate_relay_core/test_runtime.py`
-- `V-IT-001`: `tests/components/climate_relay_core/test_init.py`
-- `V-IT-002`: `tests/components/climate_relay_core/test_select.py`, `tests/components/climate_relay_core/test_init.py`
-- `V-IT-003`: `tests/components/climate_relay_core/test_init.py`
-
-Iteration `1.3` adds the following executable evidence:
-
-- `V-UT-006`: `tests/components/climate_relay_core/test_schedules.py`
-- `V-UT-007`: `tests/components/climate_relay_core/test_climate.py`,
+- `V-UT-002`: `tests/components/climate_relay_core/test_rules.py`,
   `tests/components/climate_relay_core/test_runtime.py`
-- `V-IT-006`: `tests/components/climate_relay_core/test_climate.py`,
-  `scripts/ha_smoke_test.py`
-- `V-IT-007`: `tests/components/climate_relay_core/test_climate.py`
-- `V-AT-003`, `V-AT-004`, `V-AT-006`:
-  `docs/gui-smoke-suites/iteration-1.3.md`,
-  `scripts/run_iteration_acceptance.py --iteration 1.3`
-
-Iteration `1.4` adds the following executable evidence:
-
+- `V-UT-004`: central resolver and area target priority coverage in
+  `tests/components/climate_relay_core/test_rules.py`
 - `V-UT-005`: `tests/components/climate_relay_core/test_overrides.py`,
   `tests/components/climate_relay_core/test_runtime.py`
-- `V-UT-008`: `tests/components/climate_relay_core/test_overrides.py`,
+- `V-UT-006`: schedule validation, overnight/day-boundary behavior, and
+  representative DST coverage in
+  `tests/components/climate_relay_core/test_schedules.py`
+- `V-UT-007`: fallback and degradation coverage in
+  `tests/components/climate_relay_core/test_climate.py`,
   `tests/components/climate_relay_core/test_runtime.py`
-- `V-IT-003`: `tests/components/climate_relay_core/test_init.py`,
-  `tests/components/climate_relay_core/test_runtime.py`,
+- `V-UT-008`: fixed-time next-occurrence, next-timeblock boundary behavior, and
+  time semantics in `tests/components/climate_relay_core/test_overrides.py`,
+  `tests/components/climate_relay_core/test_runtime.py`
+- `V-IT-001`: `tests/components/climate_relay_core/test_init.py`
+- `V-IT-002`: `tests/components/climate_relay_core/test_select.py`,
+  `tests/components/climate_relay_core/test_init.py`
+- `V-IT-003`: Home Assistant service registration, runtime command handling,
+  service-boundary error conversion, and override termination validation in
+  `tests/components/climate_relay_core/test_init.py`,
+  `tests/components/climate_relay_core/test_runtime.py`, and
   `scripts/ha_smoke_test.py`
 - `V-IT-006`: `tests/components/climate_relay_core/test_climate.py`,
   `scripts/ha_smoke_test.py`
-- `V-AT-002`, `V-AT-004`:
-  `docs/gui-smoke-suites/iteration-1.4.md`,
-  `scripts/run_iteration_acceptance.py --iteration 1.4`
+- `V-IT-006`, `V-IT-007`: actuation retry, blocking service-call success
+  boundary, simulation-mode suppression, and timer cleanup coverage in
+  `tests/components/climate_relay_core/test_climate.py`
+- `V-DR-001`, `V-DR-003`: documented in-memory runtime-state limitation and
+  future multi-profile configuration model in `docs/architecture.md` and
+  `docs/epic-1.md`
+- `V-AT-002`, `V-AT-003`, `V-AT-004`, `V-AT-005`, `V-AT-006`:
+  `docs/gui-smoke-suites/epic-1.md`,
+  `scripts/run_epic_acceptance.py --epic 1`; rerun on 2026-04-30 with
+  both `--skip-gui` and full GUI runner against
+  `http://haos-test.local:8123`
 
 ## Verification method legend
 

@@ -27,7 +27,7 @@ from .const import (
     ATTR_WINDOW_ENTITY_ID,
     DOMAIN,
 )
-from .domain import EffectivePresence, evaluate_schedule, resolve_room_target
+from .domain import resolve_regulation_state
 from .runtime import GlobalRuntime, RegulationProfileConfig
 
 ATTR_TEMPERATURE: Final = "temperature"
@@ -102,6 +102,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
                 self._handle_source_state_change,
             )
         )
+        self.async_on_remove(self._cancel_current_scheduled_update)
         self._schedule_next_update()
         await self._async_apply_effective_target(source="entity_added")
 
@@ -136,26 +137,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @property
     def target_temperature(self) -> float:
         """Return the resolved profile target temperature."""
-        manual_override = self._manual_override
-        if manual_override is not None:
-            return manual_override.target_temperature
-
-        if self._primary_state is None:
-            return self._runtime.config.fallback_temperature
-
-        schedule_target = self._schedule_target
-        if schedule_target is not None:
-            return resolve_room_target(
-                EffectivePresence.HOME if schedule_target == "home" else EffectivePresence.AWAY,
-                home_target=self._room_config.home_target,
-                away_target=self._room_config.away_target,
-            )
-
-        return resolve_room_target(
-            self._runtime.effective_presence,
-            home_target=self._room_config.home_target,
-            away_target=self._room_config.away_target,
-        )
+        return self._resolution.target_temperature
 
     @property
     def current_temperature(self) -> float | None:
@@ -188,12 +170,12 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             attrs[ATTR_HUMIDITY_ENTITY_ID] = self._room_config.humidity_entity_id
         if self._room_config.window_entity_id:
             attrs[ATTR_WINDOW_ENTITY_ID] = self._room_config.window_entity_id
-        next_change_at = self._next_change_at
+        resolution = self._resolution
+        next_change_at = resolution.next_change_at
         if next_change_at is not None:
             attrs[ATTR_NEXT_CHANGE_AT] = next_change_at.isoformat()
-        manual_override = self._manual_override
-        if manual_override is not None and manual_override.ends_at is not None:
-            attrs[ATTR_OVERRIDE_ENDS_AT] = manual_override.ends_at.isoformat()
+        if resolution.override_ends_at is not None:
+            attrs[ATTR_OVERRIDE_ENDS_AT] = resolution.override_ends_at.isoformat()
         if self._degradation_status is not None:
             attrs[ATTR_DEGRADATION_STATUS] = self._degradation_status
         return attrs
@@ -216,41 +198,25 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @property
     def _active_control_context(self) -> str:
-        if self._manual_override is not None:
-            return ACTIVE_CONTEXT_MANUAL_OVERRIDE
-        if self._primary_state is None:
-            return ACTIVE_CONTEXT_FALLBACK
-        return ACTIVE_CONTEXT_SCHEDULE
+        return self._resolution.active_context
 
     @property
     def _manual_override(self):  # type: ignore[no-untyped-def]
         return self._runtime.manual_override_for_profile(self._room_config.profile_id)
 
     @property
-    def _schedule_evaluation(self):  # type: ignore[no-untyped-def]
-        if self._primary_state is None:
-            return None
-        return evaluate_schedule(
-            self._room_config.schedule,
-            dt_util.now(),
-            dt_util.DEFAULT_TIME_ZONE,
+    def _resolution(self):  # type: ignore[no-untyped-def]
+        return resolve_regulation_state(
+            home_target=self._room_config.home_target,
+            away_target=self._room_config.away_target,
+            schedule=self._room_config.schedule,
+            effective_presence=self._runtime.effective_presence,
+            manual_override=self._manual_override,
+            primary_available=self._primary_state is not None,
+            fallback_temperature=self._runtime.config.fallback_temperature,
+            now=dt_util.now(),
+            timezone=dt_util.DEFAULT_TIME_ZONE,
         )
-
-    @property
-    def _schedule_target(self) -> str | None:
-        if self._runtime.effective_presence is EffectivePresence.AWAY:
-            return "away"
-        evaluation = self._schedule_evaluation
-        return None if evaluation is None else evaluation.target
-
-    @property
-    def _next_change_at(self):  # type: ignore[no-untyped-def]
-        if self._manual_override is not None:
-            return None
-        if self._runtime.effective_presence is EffectivePresence.AWAY:
-            return None
-        evaluation = self._schedule_evaluation
-        return None if evaluation is None else evaluation.next_change_at
 
     @property
     def _degradation_status(self) -> str | None:
@@ -279,9 +245,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @callback
     def _schedule_next_update(self) -> None:
-        if self._cancel_scheduled_update is not None:
-            self._cancel_scheduled_update()
-            self._cancel_scheduled_update = None
+        self._cancel_current_scheduled_update()
         next_update_at = self._next_update_at
         if next_update_at is None:
             return
@@ -290,7 +254,12 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             self._handle_schedule_update,
             dt_util.as_utc(next_update_at),
         )
-        self.async_on_remove(self._cancel_scheduled_update)
+
+    @callback
+    def _cancel_current_scheduled_update(self) -> None:
+        if self._cancel_scheduled_update is not None:
+            self._cancel_scheduled_update()
+            self._cancel_scheduled_update = None
 
     @property
     def _next_update_at(self):  # type: ignore[no-untyped-def]
@@ -305,7 +274,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
                 if candidate is not None
             ]
             return min(candidates) if candidates else None
-        return self._next_change_at
+        return self._resolution.next_change_at
 
     async def _async_apply_effective_target(self, *, source: str) -> None:
         if self._primary_state is None:
@@ -314,8 +283,6 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         target_temperature = self.target_temperature
         if self._last_applied_target_temperature == target_temperature:
             return
-        self._last_applied_target_temperature = target_temperature
-
         payload = {
             "entity_id": self._room_config.primary_climate_entity_id,
             ATTR_TEMPERATURE: target_temperature,
@@ -329,12 +296,22 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             )
             return
 
-        await self.hass.services.async_call(
-            "climate",
-            SERVICE_SET_TEMPERATURE,
-            payload,
-            blocking=False,
-        )
+        try:
+            await self.hass.services.async_call(
+                "climate",
+                SERVICE_SET_TEMPERATURE,
+                payload,
+                blocking=True,
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Failed to apply climate.set_temperature for %s to %.1f via %s",
+                self._room_config.primary_climate_entity_id,
+                target_temperature,
+                source,
+            )
+            raise
+        self._last_applied_target_temperature = target_temperature
 
 
 def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
