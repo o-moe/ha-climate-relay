@@ -43,10 +43,15 @@ from custom_components.climate_relay_core.const import (
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
     CONF_VERBOSE_LOGGING,
+    CONF_WINDOW_ACTION_TYPE,
+    CONF_WINDOW_CUSTOM_TEMPERATURE,
     CONF_WINDOW_ENTITY_ID,
+    CONF_WINDOW_OPEN_DELAY_SECONDS,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_NAME,
     DEFAULT_UNKNOWN_STATE_HANDLING,
+    DEFAULT_WINDOW_ACTION_TYPE,
+    DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
     DOMAIN,
 )
 
@@ -204,6 +209,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
                         CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 20.5,
                         CONF_AWAY_TARGET_TYPE: "relative",
                         CONF_AWAY_TARGET_TEMPERATURE: -2.0,
@@ -267,6 +275,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: None,
                         CONF_WINDOW_ENTITY_ID: None,
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
@@ -332,6 +343,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
                         CONF_WINDOW_ENTITY_ID: "binary_sensor.living_room_window",
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
@@ -403,6 +417,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: "sensor.living_room_humidity",
                         CONF_WINDOW_ENTITY_ID: None,
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
@@ -464,6 +481,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: None,
                         CONF_WINDOW_ENTITY_ID: None,
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 18.0,
@@ -844,6 +864,8 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                 CONF_HOME_TARGET_TEMPERATURE: 21.0,
                 CONF_AWAY_TARGET_TYPE: "absolute",
                 CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                 CONF_SCHEDULE_HOME_START: "06:00:00",
                 CONF_SCHEDULE_HOME_END: "22:00:00",
             },
@@ -1010,6 +1032,9 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
                         CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
                         CONF_HUMIDITY_ENTITY_ID: None,
                         CONF_WINDOW_ENTITY_ID: None,
+                        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+                        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+                        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
                         CONF_HOME_TARGET_TEMPERATURE: 21.0,
                         CONF_AWAY_TARGET_TYPE: "absolute",
                         CONF_AWAY_TARGET_TEMPERATURE: 17.0,
@@ -1049,6 +1074,33 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertEqual(
             flow.async_show_form.call_args.kwargs["errors"],
             {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_required"},
+        )
+
+    async def test_room_step_requires_custom_temperature_for_custom_window_action(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=_resolved_area(),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                    CONF_WINDOW_ACTION_TYPE: "custom_temperature",
+                    CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"][CONF_WINDOW_CUSTOM_TEMPERATURE],
+            "window_custom_temperature_required",
         )
 
     async def test_normalize_options_values_coerces_stored_wrapped_values(self) -> None:
@@ -1091,6 +1143,12 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         self.assertEqual(normalized[CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.living_room")
         self.assertEqual(normalized[CONF_HUMIDITY_ENTITY_ID], "sensor.living_room_humidity")
         self.assertEqual(normalized[CONF_WINDOW_ENTITY_ID], "binary_sensor.living_room_window")
+        self.assertEqual(normalized[CONF_WINDOW_ACTION_TYPE], DEFAULT_WINDOW_ACTION_TYPE)
+        self.assertIsNone(normalized[CONF_WINDOW_CUSTOM_TEMPERATURE])
+        self.assertEqual(
+            normalized[CONF_WINDOW_OPEN_DELAY_SECONDS],
+            DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+        )
         self.assertEqual(normalized[CONF_AWAY_TARGET_TYPE], "relative")
 
     async def test_normalize_room_options_rejects_invalid_target_type(self) -> None:

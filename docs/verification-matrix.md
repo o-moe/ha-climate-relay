@@ -55,6 +55,17 @@ Epic 1 contributes the following executable evidence:
   both `--skip-gui` and full GUI runner against
   `http://haos-test.local:8123`
 
+Epic 2 contributes the following executable evidence:
+
+- `V-UT-003`: window action mapping and capability fallback coverage in
+  `tests/components/climate_relay_core/test_rules.py`
+- `V-UT-004`, `V-AT-001`: window-priority resolution, delayed activation, and
+  close-time reevaluation coverage in
+  `tests/components/climate_relay_core/test_rules.py` and
+  `tests/components/climate_relay_core/test_climate.py`; full Epic 2
+  options-flow GUI regression and API open/close acceptance path prepared in
+  `scripts/run_epic_acceptance.py --epic 2`
+
 ## Verification method legend
 
 - `UT`: Unit test
@@ -93,6 +104,12 @@ Epic 1 contributes the following executable evidence:
 - `V-AT-004`: Room UI explanation scenarios for context, next change, override end, and degradation
 - `V-AT-005`: Restart and degradation user-visible behavior scenarios
 - `V-AT-006`: Simulation mode dry-run scenarios for safe behavior observation
+
+All acceptance artifacts that cover Home Assistant GUI/UX changes must include
+the complete affected UI flow, successful persistence, and introduced or
+affected validation/error paths. For UI-configured runtime behavior, the
+acceptance artifact must also verify the backend state or action produced by
+the saved UI configuration.
 
 ### Design reviews
 

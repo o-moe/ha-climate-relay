@@ -28,13 +28,18 @@ from .const import (
     CONF_SIMULATION_MODE,
     CONF_UNKNOWN_STATE_HANDLING,
     CONF_VERBOSE_LOGGING,
+    CONF_WINDOW_ACTION_TYPE,
+    CONF_WINDOW_CUSTOM_TEMPERATURE,
     CONF_WINDOW_ENTITY_ID,
+    CONF_WINDOW_OPEN_DELAY_SECONDS,
     DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_NAME,
     DEFAULT_SCHEDULE_HOME_END,
     DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
+    DEFAULT_WINDOW_ACTION_TYPE,
+    DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
     DOMAIN,
 )
 from .runtime import _resolve_area_reference
@@ -199,6 +204,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
                 if submitted[CONF_SCHEDULE_HOME_START] == submitted[CONF_SCHEDULE_HOME_END]:
                     errors[CONF_SCHEDULE_HOME_END] = "schedule_window_required"
+                if (
+                    submitted[CONF_WINDOW_ACTION_TYPE] == "custom_temperature"
+                    and submitted[CONF_WINDOW_CUSTOM_TEMPERATURE] is None
+                ):
+                    errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_required"
 
                 if not errors:
                     return self.async_create_entry(
@@ -242,6 +252,9 @@ def _default_room_data() -> dict[str, Any]:
         CONF_PRIMARY_CLIMATE_ENTITY_ID: None,
         CONF_HUMIDITY_ENTITY_ID: None,
         CONF_WINDOW_ENTITY_ID: None,
+        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
+        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
         CONF_HOME_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
         CONF_AWAY_TARGET_TYPE: DEFAULT_AWAY_TARGET_TYPE,
         CONF_AWAY_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE - 3.0,
@@ -343,6 +356,16 @@ def _normalize_room_options(values: dict[str, Any]) -> dict[str, Any]:
         CONF_WINDOW_ENTITY_ID: _normalize_optional_entity_selector(
             values.get(CONF_WINDOW_ENTITY_ID)
         ),
+        CONF_WINDOW_ACTION_TYPE: _normalize_window_action_type_selector(
+            values.get(CONF_WINDOW_ACTION_TYPE, DEFAULT_WINDOW_ACTION_TYPE)
+        ),
+        CONF_WINDOW_CUSTOM_TEMPERATURE: _normalize_optional_float_selector(
+            values.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
+        ),
+        CONF_WINDOW_OPEN_DELAY_SECONDS: _normalize_non_negative_int_selector(
+            values.get(CONF_WINDOW_OPEN_DELAY_SECONDS, DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
+            default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+        ),
         CONF_HOME_TARGET_TEMPERATURE: float(
             values.get(CONF_HOME_TARGET_TEMPERATURE, DEFAULT_FALLBACK_TEMPERATURE)
         ),
@@ -401,6 +424,36 @@ def _normalize_target_type_selector(raw_value: Any) -> str:
     if normalized not in {"absolute", "relative"}:
         raise ValueError(f"Unsupported away target type: {raw_value!r}")
     return normalized
+
+
+def _normalize_window_action_type_selector(raw_value: Any) -> str:
+    """Normalize the window-action selector."""
+    normalized = _normalize_select_value(raw_value)
+    if normalized not in {
+        "off",
+        "frost_protection",
+        "minimum_temperature",
+        "custom_temperature",
+    }:
+        raise ValueError(f"Unsupported window action type: {raw_value!r}")
+    return normalized
+
+
+def _normalize_optional_float_selector(raw_value: Any) -> float | None:
+    """Normalize an optional number selector value."""
+    normalized = _unwrap_selector_value(raw_value)
+    if normalized in (None, ""):
+        return None
+    return float(normalized)
+
+
+def _normalize_non_negative_int_selector(raw_value: Any, *, default: int) -> int:
+    """Normalize a non-negative integer selector value."""
+    normalized = _unwrap_selector_value(raw_value)
+    if normalized in (None, ""):
+        return default
+    value = int(normalized)
+    return value if value >= 0 else default
 
 
 def _resolve_room_entity_ids(
@@ -547,6 +600,44 @@ def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
                 selector.EntitySelectorConfig(
                     domain="binary_sensor",
                     multiple=False,
+                )
+            ),
+            vol.Required(
+                CONF_WINDOW_ACTION_TYPE,
+                default=values.get(CONF_WINDOW_ACTION_TYPE, DEFAULT_WINDOW_ACTION_TYPE),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        "off",
+                        "frost_protection",
+                        "minimum_temperature",
+                        "custom_temperature",
+                    ],
+                    sort=False,
+                )
+            ),
+            vol.Optional(CONF_WINDOW_CUSTOM_TEMPERATURE): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=5,
+                    max=35,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="°C",
+                )
+            ),
+            vol.Required(
+                CONF_WINDOW_OPEN_DELAY_SECONDS,
+                default=values.get(
+                    CONF_WINDOW_OPEN_DELAY_SECONDS,
+                    DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s",
                 )
             ),
             vol.Required(

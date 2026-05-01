@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Final
 
 from homeassistant.components.climate import ClimateEntity, HVACMode
-from homeassistant.components.climate.const import SERVICE_SET_TEMPERATURE
+from homeassistant.components.climate.const import (
+    ATTR_MIN_TEMP,
+    ATTR_PRESET_MODES,
+    SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_TEMPERATURE,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
@@ -27,17 +34,25 @@ from .const import (
     ATTR_WINDOW_ENTITY_ID,
     DOMAIN,
 )
-from .domain import resolve_regulation_state
+from .domain import (
+    ClimateCapabilities,
+    EffectiveTarget,
+    resolve_regulation_state,
+    resolve_window_action,
+)
 from .runtime import GlobalRuntime, RegulationProfileConfig
 
 ATTR_TEMPERATURE: Final = "temperature"
 ATTR_CURRENT_TEMPERATURE: Final = "current_temperature"
 ATTR_HVAC_MODES: Final = "hvac_modes"
+ATTR_HVAC_MODE: Final = "hvac_mode"
+ATTR_PRESET_MODE: Final = "preset_mode"
 DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE: Final = "optional_sensor_unavailable"
 DEGRADATION_REQUIRED_COMPONENT_FALLBACK: Final = "required_component_fallback"
 ACTIVE_CONTEXT_FALLBACK: Final = "fallback"
 ACTIVE_CONTEXT_MANUAL_OVERRIDE: Final = "manual_override"
 ACTIVE_CONTEXT_SCHEDULE: Final = "schedule"
+ACTIVE_CONTEXT_WINDOW_OVERRIDE: Final = "window_override"
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -85,7 +100,10 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         if room_config.area_name:
             self._attr_device_info["suggested_area"] = room_config.area_name
         self._last_applied_target_temperature: float | None = None
+        self._last_applied_effective_target: EffectiveTarget | None = None
         self._cancel_scheduled_update = None
+        self._cancel_window_open_delay = None
+        self._window_override_active = False
 
     async def async_added_to_hass(self) -> None:
         """Register for upstream runtime and state changes."""
@@ -103,6 +121,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             )
         )
         self.async_on_remove(self._cancel_current_scheduled_update)
+        self.async_on_remove(self._cancel_current_window_open_delay)
         self._schedule_next_update()
         await self._async_apply_effective_target(source="entity_added")
 
@@ -135,7 +154,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         return modes or [HVACMode.HEAT]
 
     @property
-    def target_temperature(self) -> float:
+    def target_temperature(self) -> float | None:
         """Return the resolved profile target temperature."""
         return self._resolution.target_temperature
 
@@ -212,6 +231,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             schedule=self._room_config.schedule,
             effective_presence=self._runtime.effective_presence,
             manual_override=self._manual_override,
+            window_target=self._window_target,
             primary_available=self._primary_state is not None,
             fallback_temperature=self._runtime.config.fallback_temperature,
             now=dt_util.now(),
@@ -226,6 +246,31 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             return DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE
         return None
 
+    @property
+    def _window_target(self) -> EffectiveTarget | None:
+        if not self._window_override_active or self._primary_state is None:
+            return None
+        return resolve_window_action(
+            self._room_config.window_action_type,
+            self._climate_capabilities,
+            custom_temperature=self._room_config.window_custom_temperature,
+        )
+
+    @property
+    def _climate_capabilities(self) -> ClimateCapabilities:
+        primary_state = self._primary_state
+        attributes = primary_state.attributes if primary_state is not None else {}
+        hvac_modes = {str(mode) for mode in attributes.get(ATTR_HVAC_MODES, [])}
+        preset_modes = {str(mode) for mode in attributes.get(ATTR_PRESET_MODES, [])}
+        min_temperature = attributes.get(ATTR_MIN_TEMP, 7.0)
+        if not isinstance(min_temperature, int | float):
+            min_temperature = 7.0
+        return ClimateCapabilities(
+            supports_off=HVACMode.OFF.value in hvac_modes,
+            supports_preset_frost="frost_protection" in preset_modes,
+            min_temperature=float(min_temperature),
+        )
+
     @callback
     def _handle_runtime_update(self) -> None:
         self.async_write_ha_state()
@@ -234,6 +279,8 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     @callback
     def _handle_source_state_change(self, _event) -> None:  # type: ignore[no-untyped-def]
+        if self._is_window_state_change(_event):
+            self._handle_window_state_change(_event.data.get("new_state"))
         self.async_write_ha_state()
         self.hass.async_create_task(self._async_apply_effective_target(source="source_update"))
 
@@ -261,6 +308,51 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             self._cancel_scheduled_update()
             self._cancel_scheduled_update = None
 
+    @callback
+    def _cancel_current_window_open_delay(self) -> None:
+        if self._cancel_window_open_delay is not None:
+            self._cancel_window_open_delay()
+            self._cancel_window_open_delay = None
+
+    @callback
+    def _is_window_state_change(self, event) -> bool:  # type: ignore[no-untyped-def]
+        return (
+            self._room_config.window_entity_id is not None
+            and getattr(event, "data", {}).get("entity_id") == self._room_config.window_entity_id
+        )
+
+    @callback
+    def _handle_window_state_change(self, new_state) -> None:  # type: ignore[no-untyped-def]
+        if _is_open_window_state(new_state):
+            self._schedule_window_open_activation()
+            return
+
+        self._cancel_current_window_open_delay()
+        if self._window_override_active:
+            self._window_override_active = False
+
+    @callback
+    def _schedule_window_open_activation(self) -> None:
+        self._cancel_current_window_open_delay()
+        delay_seconds = self._room_config.window_open_delay_seconds
+        if delay_seconds <= 0:
+            self._activate_window_override(None)
+            return
+        self._cancel_window_open_delay = async_track_point_in_utc_time(
+            self.hass,
+            self._activate_window_override,
+            dt_util.as_utc(dt_util.now() + timedelta(seconds=delay_seconds)),
+        )
+
+    @callback
+    def _activate_window_override(self, _now) -> None:  # type: ignore[no-untyped-def]
+        self._cancel_window_open_delay = None
+        if not _is_open_window_state(self._window_state):
+            return
+        self._window_override_active = True
+        self.async_write_ha_state()
+        self.hass.async_create_task(self._async_apply_effective_target(source="window_open"))
+
     @property
     def _next_update_at(self):  # type: ignore[no-untyped-def]
         manual_override = self._manual_override
@@ -280,38 +372,55 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         if self._primary_state is None:
             return
 
-        target_temperature = self.target_temperature
-        if self._last_applied_target_temperature == target_temperature:
+        effective_target = self._resolution.effective_target
+        if self._last_applied_effective_target == effective_target:
             return
-        payload = {
-            "entity_id": self._room_config.primary_climate_entity_id,
-            ATTR_TEMPERATURE: target_temperature,
-        }
         if self._runtime.config.simulation_mode:
             _LOGGER.info(
-                "Simulation mode suppressed climate.set_temperature for %s to %.1f via %s",
+                "Simulation mode suppressed climate write for %s to %s via %s",
                 self._room_config.primary_climate_entity_id,
-                target_temperature,
+                effective_target,
                 source,
             )
             return
 
         try:
-            await self.hass.services.async_call(
-                "climate",
-                SERVICE_SET_TEMPERATURE,
-                payload,
-                blocking=True,
-            )
+            await self._async_call_climate_services(effective_target)
         except Exception:
             _LOGGER.exception(
-                "Failed to apply climate.set_temperature for %s to %.1f via %s",
+                "Failed to apply climate target for %s to %s via %s",
                 self._room_config.primary_climate_entity_id,
-                target_temperature,
+                effective_target,
                 source,
             )
             raise
-        self._last_applied_target_temperature = target_temperature
+        self._last_applied_effective_target = effective_target
+        self._last_applied_target_temperature = effective_target.target_temperature
+
+    async def _async_call_climate_services(self, target: EffectiveTarget) -> None:
+        """Apply a resolved target using HA-native climate services."""
+        entity_id = self._room_config.primary_climate_entity_id
+        if target.hvac_mode is not None and target.hvac_mode != self.hvac_mode.value:
+            await self.hass.services.async_call(
+                "climate",
+                SERVICE_SET_HVAC_MODE,
+                {"entity_id": entity_id, ATTR_HVAC_MODE: target.hvac_mode},
+                blocking=True,
+            )
+        if target.preset_mode is not None:
+            await self.hass.services.async_call(
+                "climate",
+                SERVICE_SET_PRESET_MODE,
+                {"entity_id": entity_id, ATTR_PRESET_MODE: target.preset_mode},
+                blocking=True,
+            )
+        if target.target_temperature is not None:
+            await self.hass.services.async_call(
+                "climate",
+                SERVICE_SET_TEMPERATURE,
+                {"entity_id": entity_id, ATTR_TEMPERATURE: target.target_temperature},
+                blocking=True,
+            )
 
 
 def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
@@ -319,3 +428,10 @@ def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
     if state is None:
         return False
     return str(state.state) in {"unknown", "unavailable"}
+
+
+def _is_open_window_state(state) -> bool:  # type: ignore[no-untyped-def]
+    """Return whether a window contact state represents open."""
+    if state is None:
+        return False
+    return str(state.state).lower() in {"on", "open"}

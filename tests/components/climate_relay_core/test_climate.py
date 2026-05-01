@@ -44,6 +44,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         primary_state: object | None = None,
         humidity_state: object | None = None,
         window_state: object | None = None,
+        window_action_type: str = "minimum_temperature",
+        window_open_delay_seconds: int = 300,
     ) -> ClimateRelayCoreRoomClimateEntity:
         hass = Mock()
         hass.services.async_call = AsyncMock()
@@ -74,6 +76,8 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
                         "primary_climate_entity_id": "climate.living_room",
                         "humidity_entity_id": "sensor.living_room_humidity",
                         "window_entity_id": "binary_sensor.living_room_window",
+                        "window_action_type": window_action_type,
+                        "window_open_delay_seconds": window_open_delay_seconds,
                         "home_target_temperature": 21.5,
                         "away_target_type": "relative",
                         "away_target_temperature": -2.0,
@@ -204,6 +208,120 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         )
         self.assertNotIn(ATTR_NEXT_CHANGE_AT, entity.extra_state_attributes)
 
+    async def test_window_override_activates_after_delay_and_uses_window_action(
+        self,
+    ) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(
+                state="heat",
+                attributes={
+                    "temperature": 19.0,
+                    "hvac_modes": ["off", "heat"],
+                    "min_temp": 6.0,
+                },
+            ),
+            window_state=SimpleNamespace(state="on", attributes={}),
+            window_action_type="off",
+            window_open_delay_seconds=30,
+        )
+        entity.async_write_ha_state = Mock()
+        timer_callbacks = []
+
+        with patch.object(
+            climate_platform,
+            "async_track_point_in_utc_time",
+            side_effect=lambda _hass, action, _point: timer_callbacks.append(action) or Mock(),
+        ):
+            entity._handle_source_state_change(
+                SimpleNamespace(
+                    data={
+                        "entity_id": "binary_sensor.living_room_window",
+                        "new_state": SimpleNamespace(state="on", attributes={}),
+                    }
+                )
+            )
+
+        entity.hass.services.async_call.assert_not_awaited()
+        self.assertEqual(entity.target_temperature, 21.5)
+        self.assertEqual(len(timer_callbacks), 1)
+
+        timer_callbacks[0](None)
+        await asyncio.sleep(0)
+
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT],
+            "window_override",
+        )
+        entity.hass.services.async_call.assert_awaited_once_with(
+            "climate",
+            "set_hvac_mode",
+            {"entity_id": "climate.living_room", "hvac_mode": "off"},
+            blocking=True,
+        )
+
+    async def test_window_close_clears_override_and_reevaluates_current_target(self) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(
+                state="heat",
+                attributes={"temperature": 19.0, "min_temp": 6.0},
+            ),
+            window_state=SimpleNamespace(state="on", attributes={}),
+            window_open_delay_seconds=0,
+        )
+        entity.async_write_ha_state = Mock()
+        berlin = ZoneInfo("Europe/Berlin")
+
+        with (
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(2026, 4, 29, 12, 0, tzinfo=berlin),
+            ),
+            patch.object(climate_platform.dt_util, "DEFAULT_TIME_ZONE", berlin),
+        ):
+            entity._handle_source_state_change(
+                SimpleNamespace(
+                    data={
+                        "entity_id": "binary_sensor.living_room_window",
+                        "new_state": SimpleNamespace(state="on", attributes={}),
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+
+        self.assertEqual(entity.target_temperature, 6.0)
+        entity.hass.services.async_call.reset_mock()
+
+        with (
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(2026, 4, 29, 23, 0, tzinfo=berlin),
+            ),
+            patch.object(climate_platform.dt_util, "DEFAULT_TIME_ZONE", berlin),
+        ):
+            entity._handle_source_state_change(
+                SimpleNamespace(
+                    data={
+                        "entity_id": "binary_sensor.living_room_window",
+                        "new_state": SimpleNamespace(state="off", attributes={}),
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+
+            self.assertEqual(entity.target_temperature, 19.5)
+            self.assertEqual(
+                entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT],
+                "schedule",
+            )
+        entity.hass.services.async_call.assert_awaited_once_with(
+            "climate",
+            "set_temperature",
+            {"entity_id": "climate.living_room", "temperature": 19.5},
+            blocking=True,
+        )
+
     async def test_next_update_uses_earliest_manual_override_boundary(self) -> None:
         entity = self._build_entity(
             primary_state=SimpleNamespace(state="heat", attributes={"temperature": 19.0}),
@@ -290,7 +408,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         ):
             await entity._async_apply_effective_target(source="test")
 
-        self.assertIn("Failed to apply climate.set_temperature", logs.output[0])
+        self.assertIn("Failed to apply climate target", logs.output[0])
         self.assertIsNone(entity._last_applied_target_temperature)
 
         with patch.object(
@@ -335,7 +453,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             await entity._async_apply_effective_target(source="test")
 
         entity.hass.services.async_call.assert_not_awaited()
-        self.assertIn("Simulation mode suppressed climate.set_temperature", logs.output[0])
+        self.assertIn("Simulation mode suppressed climate write", logs.output[0])
 
     async def test_entity_marks_optional_sensor_unavailability_as_degraded(self) -> None:
         entity = self._build_entity(
@@ -445,7 +563,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             entity._handle_runtime_update()
             entity._handle_source_state_change(None)
 
-        self.assertEqual(entity.async_on_remove.call_count, 3)
+        self.assertEqual(entity.async_on_remove.call_count, 4)
         track_state_change.assert_called_once()
         tracked_entities = track_state_change.call_args.args[1]
         self.assertEqual(
@@ -497,7 +615,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
 
         first_cancel.assert_called_once()
         second_cancel.assert_not_called()
-        self.assertEqual(entity.async_on_remove.call_count, 3)
+        self.assertEqual(entity.async_on_remove.call_count, 4)
 
     async def test_is_unavailable_distinguishes_none_and_unknown_states(self) -> None:
         self.assertFalse(_is_unavailable(None))

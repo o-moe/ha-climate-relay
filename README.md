@@ -15,6 +15,7 @@ climate control.
 - optional simulation mode for dry-run observation without device actuation
 - one daily schedule window for the first area-bound regulation profile
 - manual overrides for the first area-bound regulation profile through Home Assistant services
+- delayed open-window automation for the first area-bound regulation profile
 - optional verbose diagnostic logging
 
 ## Installation
@@ -69,6 +70,8 @@ integration. After setup, open the integration card menu in
 - handling of `unknown` and `unavailable` person states
 - fallback temperature
 - optional daily manual-override reset time
+- optional window contact, open-window action, custom window temperature, and
+  delay for the first regulation profile
 - simulation mode
 - verbose logging
 
@@ -116,6 +119,13 @@ Creating a second override for the same area replaces the first. Use
 overrides expose `override_ends_at` on the area climate entity; active overrides
 set `active_control_context` to `manual_override`.
 
+If a window contact is configured, opening it starts the configured delay. If
+the contact remains open for the full delay, the area climate entity switches
+to `active_control_context = window_override` and applies the configured
+open-window action. When the contact closes, Climate Relay reevaluates the
+current schedule, presence, and manual override state instead of restoring an
+old pre-window target.
+
 ## Diagnostics
 
 The integration writes logs for global mode transitions and configuration
@@ -124,8 +134,7 @@ resolved effective presence context.
 
 If simulation mode is enabled, the integration still evaluates its control
 logic and logs the resulting area target decisions, but it suppresses the
-`climate.set_temperature` write that would otherwise be sent to the primary
-climate entity.
+climate writes that would otherwise be sent to the primary climate entity.
 
 Device writes are treated as confirmed only after Home Assistant accepts the
 underlying `climate.set_temperature` service call. If a write fails, the same
@@ -140,7 +149,6 @@ suppressed as already applied.
   later epic concern
 - schedule editing is limited to one daily home window
 - manual overrides are service/action based; a dedicated dashboard control is not available yet
-- window automation is not available yet
 - a dedicated dashboard UI is not available yet
 
 ## Additional Documentation

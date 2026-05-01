@@ -64,6 +64,20 @@ model.
   Full durable runtime persistence is deliberately deferred to the persistence
   epic because adding it here would broaden product behavior beyond hardening.
 
+## Epic 2 window automation decisions
+
+- Window override is part of the central pure-Python resolver and has the
+  highest rule priority.
+- The Home Assistant climate entity owns only framework adaptation: it observes
+  the configured binary sensor, manages delayed activation, maps
+  primary-climate capabilities, and passes an already resolved window target
+  into the domain resolver.
+- Window close clears the active window override and runs normal rule
+  evaluation at close time instead of restoring a stored pre-window target.
+- Window action mapping remains generic and capability-based. Unsupported
+  `off` and `frost_protection` actions fall back to the primary climate
+  minimum temperature.
+
 ## Future multi-profile configuration
 
 Runtime data structures already accept more than one regulation profile when
