@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.16"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.17"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 EPIC_2_PRIMARY_CLIMATES = (
@@ -932,6 +932,20 @@ async function setTextInput(selectorIndex, value) {{
       }}));
     }}
   }}, [selectorIndex, String(value)]);
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(500);
+}}
+
+async function clickDialogOk() {{
+  const buttons = page.getByRole("button", {{ name: "OK", exact: true }});
+  for (let index = await buttons.count() - 1; index >= 0; index -= 1) {{
+    const button = buttons.nth(index);
+    if (await button.isVisible().catch(() => false)) {{
+      await button.click();
+      return;
+    }}
+  }}
+  throw new Error("No visible OK button found.");
 }}
 
 async function setTimeInput(selectorIndex, hours, minutes) {{
@@ -1021,7 +1035,7 @@ await expectText("Required because Open-window action is set to Use custom tempe
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Set the custom temperature for the selected open-window action.");
 await setTextInput(0, "12");
-await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await clickDialogOk();
 await expectText("Regulation Profiles");
 
 await chooseProfileAction("edit", "Edit profile");
