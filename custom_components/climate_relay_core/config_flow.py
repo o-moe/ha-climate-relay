@@ -776,9 +776,9 @@ def _build_window_custom_temperature_schema(value: float | None) -> vol.Schema:
     """Build the custom-temperature step schema for window automation."""
     return vol.Schema(
         {
-            vol.Optional(
+            vol.Required(
                 CONF_WINDOW_CUSTOM_TEMPERATURE,
-                default=value,
+                default="" if value is None else value,
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=5,
