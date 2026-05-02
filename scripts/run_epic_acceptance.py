@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.10"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.11"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 
@@ -281,7 +281,6 @@ def _prepare_epic_2_profile(*, base_url: str, token: str) -> None:
             "primary_climate_entity_id": "climate.virtual_climate_office",
             "window_entity_id": "binary_sensor.virtual_window_office",
             "window_action_type": "minimum_temperature",
-            "window_custom_temperature": None,
             "window_open_delay_seconds": 0,
             "home_target_temperature": 20.0,
             "away_target_type": "absolute",
@@ -843,7 +842,6 @@ await selectNativeOption(0, "custom_temperature", "Use custom temperature");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Open-window Action: Custom Temperature");
 await expectText("Required because Open-window action is set to Use custom temperature.");
-await setTextInput(0, "");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Set the custom temperature for the selected open-window action.");
 await setTextInput(0, "12");
@@ -1045,10 +1043,9 @@ def _run_epic_2(
         state="off",
         attributes={"device_class": "window", "friendly_name": "Virtual Window Office"},
     )
-    if skip_gui:
-        print("[acceptance] Prepare Epic 2 window automation profile through API")
-        _prepare_epic_2_profile(base_url=base_url, token=token)
-    else:
+    print("[acceptance] Prepare Epic 2 window automation profile through API")
+    _prepare_epic_2_profile(base_url=base_url, token=token)
+    if not skip_gui:
         pw_env = _playwright_env()
         pwcli = pw_env["PWCLI"]
         session = f"e2{os.getpid()}"
