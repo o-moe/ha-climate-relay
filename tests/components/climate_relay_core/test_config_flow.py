@@ -15,6 +15,7 @@ from custom_components.climate_relay_core.config_flow import (
     _build_options_schema,
     _build_reset_time_schema,
     _build_room_schema,
+    _build_window_custom_temperature_schema,
     _merge_room_submission,
     _normalize_bool,
     _normalize_options_values,
@@ -797,6 +798,19 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         ]
         self.assertIsInstance(reset_time, selector.TimeSelector)
 
+    async def test_build_window_custom_temperature_schema_uses_text_number_selector(self) -> None:
+        schema = _build_window_custom_temperature_schema(12.5)
+        validators = schema.schema
+        custom_temperature = validators[
+            next(key for key in validators if key.schema == CONF_WINDOW_CUSTOM_TEMPERATURE)
+        ]
+
+        self.assertIsInstance(custom_temperature, selector.TextSelector)
+        self.assertEqual(
+            custom_temperature.config["type"],
+            selector.TextSelectorType.NUMBER,
+        )
+
     async def test_build_room_schema_uses_expected_selectors(self) -> None:
         schema = _build_room_schema(
             {
@@ -835,6 +849,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             validators[next(key for key in validators if key.schema == CONF_AWAY_TARGET_TYPE)],
             selector.SelectSelector,
         )
+        self.assertFalse(any(key.schema == CONF_WINDOW_CUSTOM_TEMPERATURE for key in validators))
 
     async def test_build_room_schema_omits_none_defaults_for_optional_entity_selectors(
         self,
@@ -1076,7 +1091,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             {CONF_PRIMARY_CLIMATE_ENTITY_ID: "primary_climate_required"},
         )
 
-    async def test_room_step_requires_custom_temperature_for_custom_window_action(self) -> None:
+    async def test_room_step_routes_custom_window_action_to_temperature_step(self) -> None:
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
@@ -1099,8 +1114,94 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"type": "form"})
         self.assertEqual(
+            flow.async_show_form.call_args.kwargs["step_id"],
+            "window_custom_temperature",
+        )
+        self.assertEqual(flow._pending_room[CONF_WINDOW_ACTION_TYPE], "custom_temperature")
+
+    async def test_custom_temperature_step_requires_value(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow._pending_room = {
+            CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+            CONF_WINDOW_ACTION_TYPE: "custom_temperature",
+            CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+            CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+            CONF_HOME_TARGET_TEMPERATURE: 21.0,
+            CONF_AWAY_TARGET_TYPE: "absolute",
+            CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            CONF_SCHEDULE_HOME_START: "06:00:00",
+            CONF_SCHEDULE_HOME_END: "22:00:00",
+        }
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        result = await flow.async_step_window_custom_temperature(
+            {CONF_WINDOW_CUSTOM_TEMPERATURE: ""}
+        )
+
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(
             flow.async_show_form.call_args.kwargs["errors"][CONF_WINDOW_CUSTOM_TEMPERATURE],
             "window_custom_temperature_required",
+        )
+
+    async def test_custom_temperature_step_rejects_out_of_range_value(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow._pending_room = {
+            CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+            CONF_WINDOW_ACTION_TYPE: "custom_temperature",
+            CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+            CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+            CONF_HOME_TARGET_TEMPERATURE: 21.0,
+            CONF_AWAY_TARGET_TYPE: "absolute",
+            CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            CONF_SCHEDULE_HOME_START: "06:00:00",
+            CONF_SCHEDULE_HOME_END: "22:00:00",
+        }
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        result = await flow.async_step_window_custom_temperature(
+            {CONF_WINDOW_CUSTOM_TEMPERATURE: "40"}
+        )
+
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"][CONF_WINDOW_CUSTOM_TEMPERATURE],
+            "window_custom_temperature_range",
+        )
+
+    async def test_custom_temperature_step_creates_options_entry(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow._pending_options = {CONF_PERSON_ENTITY_IDS: ["person.alice"]}
+        flow._pending_room = {
+            CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+            CONF_WINDOW_ACTION_TYPE: "custom_temperature",
+            CONF_WINDOW_CUSTOM_TEMPERATURE: None,
+            CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+            CONF_HOME_TARGET_TEMPERATURE: 21.0,
+            CONF_AWAY_TARGET_TYPE: "absolute",
+            CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+            CONF_SCHEDULE_HOME_START: "06:00:00",
+            CONF_SCHEDULE_HOME_END: "22:00:00",
+        }
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+
+        result = await flow.async_step_window_custom_temperature(
+            {CONF_WINDOW_CUSTOM_TEMPERATURE: "12.5"}
+        )
+
+        self.assertEqual(result, {"type": "create_entry"})
+        flow.async_create_entry.assert_called_once()
+        created_data = flow.async_create_entry.call_args.kwargs["data"]
+        self.assertEqual(created_data[CONF_PERSON_ENTITY_IDS], ["person.alice"])
+        self.assertEqual(
+            created_data[CONF_ROOMS][0][CONF_WINDOW_CUSTOM_TEMPERATURE],
+            12.5,
         )
 
     async def test_normalize_options_values_coerces_stored_wrapped_values(self) -> None:

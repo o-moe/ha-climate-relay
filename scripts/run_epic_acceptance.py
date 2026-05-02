@@ -739,6 +739,28 @@ async function clearNumberInput(selectorIndex) {{
   }});
 }}
 
+async function setTextInput(selectorIndex, value) {{
+  const selector = page.locator("ha-selector-text").nth(selectorIndex);
+  const input = selector.locator("input").first();
+  await input.fill(String(value));
+  await input.dispatchEvent("input");
+  await input.dispatchEvent("change");
+  await selector.evaluate((element, value) => {{
+    const targets = [element];
+    if (element.getRootNode().host) {{
+      targets.push(element.getRootNode().host);
+    }}
+    for (const target of targets) {{
+      target.value = value;
+      target.dispatchEvent(new CustomEvent("value-changed", {{
+        bubbles: true,
+        composed: true,
+        detail: {{ value }},
+      }}));
+    }}
+  }}, String(value));
+}}
+
 async function setTimeInput(selectorIndex, hours, minutes) {{
   const selector = page.locator("ha-selector-time").nth(selectorIndex);
   for (const [name, value] of [["hours", hours], ["minutes", minutes]]) {{
@@ -774,7 +796,6 @@ await openRegulationProfile();
 for (const text of [
   "Window contact",
   "Open-window action",
-  "Open-window custom temperature",
 ]) {{
   await expectText(text);
 }}
@@ -797,20 +818,18 @@ await submitAndStay();
 await expectText("Choose different start and end times for the daily home schedule.");
 
 await setTimeInput(1, "22", "00");
-await selectNativeOption(0, "custom_temperature", "Use custom temperature");
-await clearNumberInput(0);
-await submitAndStay();
-await expectAnyText([
-  "Set a custom temperature or choose a different open-window action.",
-  "expected float",
-]);
-
 await selectEntity(2, "Window contact", "Virtual Window Office");
-await setNumberInput(0, "12");
-await setNumberInput(1, "0");
-await setNumberInput(2, "20");
+await setNumberInput(0, "0");
+await setNumberInput(1, "20");
 await selectNativeOption(1, "absolute", "Absolute temperature");
-await setNumberInput(3, "17");
+await setNumberInput(2, "17");
+await selectNativeOption(0, "custom_temperature", "Use custom temperature");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Open-window Action: Custom Temperature");
+await expectText("Required because Open-window action is set to Use custom temperature.");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Set the custom temperature for the selected open-window action.");
+await setTextInput(0, "12");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Optionen wurden erfolgreich gespeichert.");
 await page.getByRole("button", {{ name: /Fertig|Done|Finish/ }}).click();

@@ -68,6 +68,11 @@ contract:
   acceptance runner must configure the feature through the UI and then verify
   the resulting backend state or action through Home Assistant state, services,
   or another executable runtime observation.
+- Home Assistant option fields that are conditionally required by a selected
+  mode, toggle, or action must follow the established dedicated-step pattern
+  instead of remaining as always-visible optional fields. The dedicated step
+  must explicitly identify the selection that made the field required and must
+  expose integration-owned localized validation errors.
 
 ## Increment slicing policy
 

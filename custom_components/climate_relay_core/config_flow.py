@@ -81,6 +81,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self._pending_options: dict[str, Any] | None = None
+        self._pending_room: dict[str, Any] | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -204,13 +205,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
                 if submitted[CONF_SCHEDULE_HOME_START] == submitted[CONF_SCHEDULE_HOME_END]:
                     errors[CONF_SCHEDULE_HOME_END] = "schedule_window_required"
-                if (
-                    submitted[CONF_WINDOW_ACTION_TYPE] == "custom_temperature"
-                    and submitted[CONF_WINDOW_CUSTOM_TEMPERATURE] is None
-                ):
-                    errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_required"
-
                 if not errors:
+                    if submitted[CONF_WINDOW_ACTION_TYPE] == "custom_temperature":
+                        self._pending_room = submitted
+                        return await self.async_step_window_custom_temperature()
+                    submitted = {**submitted, CONF_WINDOW_CUSTOM_TEMPERATURE: None}
                     return self.async_create_entry(
                         title="",
                         data={
@@ -229,6 +228,49 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                 _build_room_schema(room_values),
                 room_values,
             ),
+            errors=errors,
+        )
+
+    async def async_step_window_custom_temperature(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Collect the custom temperature required by the selected window action."""
+        errors: dict[str, str] = {}
+        room_values = self._pending_room or _normalize_room_options(
+            (_normalize_rooms(self._config_entry.options) or [_default_room_data()])[0]
+        )
+        value = room_values.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
+
+        if user_input is not None:
+            try:
+                value = _normalize_optional_float_selector(
+                    user_input.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
+                )
+                if value is None:
+                    errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_required"
+                elif not 5 <= value <= 35:
+                    errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_range"
+                else:
+                    submitted = {**room_values, CONF_WINDOW_CUSTOM_TEMPERATURE: value}
+                    return self.async_create_entry(
+                        title="",
+                        data={
+                            **(self._pending_options or {}),
+                            CONF_ROOMS: [submitted],
+                        },
+                    )
+            except ValueError:
+                errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_invalid"
+            except Exception:
+                _LOGGER.exception(
+                    "Failed to validate window custom-temperature payload: %r",
+                    user_input,
+                )
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="window_custom_temperature",
+            data_schema=_build_window_custom_temperature_schema(value),
             errors=errors,
         )
 
@@ -583,6 +625,23 @@ def _build_reset_time_schema(value: str | None) -> vol.Schema:
     )
 
 
+def _build_window_custom_temperature_schema(value: float | None) -> vol.Schema:
+    """Build the custom-temperature step schema for window automation."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_WINDOW_CUSTOM_TEMPERATURE,
+                default="" if value is None else str(value),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.NUMBER,
+                    suffix="°C",
+                )
+            ),
+        }
+    )
+
+
 def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
     """Build the regulation-profile schema."""
     return vol.Schema(
@@ -620,15 +679,6 @@ def _build_room_schema(values: dict[str, Any]) -> vol.Schema:
                         {"value": "custom_temperature", "label": "Use custom temperature"},
                     ],
                     sort=False,
-                )
-            ),
-            vol.Optional(CONF_WINDOW_CUSTOM_TEMPERATURE): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=5,
-                    max=35,
-                    step=0.5,
-                    mode=selector.NumberSelectorMode.BOX,
-                    unit_of_measurement="°C",
                 )
             ),
             vol.Required(

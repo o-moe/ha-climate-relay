@@ -97,6 +97,14 @@ This document defines the non-negotiable engineering expectations for this repos
   user-facing inputs instead of generic Python container types.
 - Conditional user inputs shall be modeled as conditional form structure where
   feasible, not merely as optional validators on always-visible fields.
+- In Home Assistant config/options flows, fields that are truly optional may
+  remain in the parent step. Fields that become required because of a selected
+  mode, toggle, or action shall use a dedicated follow-up step when HA selector
+  schema validation would otherwise preempt integration-owned validation and
+  localized errors.
+- Dedicated conditional steps must name the selected mode, toggle, or action in
+  their title or description, and their field descriptions must make clear that
+  the value is required because of that preceding selection.
 - User-facing entity names, states, and config labels shall be defined through
   Home Assistant localization files rather than hardcoded UI strings.
 - Changes to `strings.json` and translated runtime strings shall be kept in sync.

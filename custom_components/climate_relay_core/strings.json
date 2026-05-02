@@ -52,7 +52,6 @@
           "humidity_entity_id": "Humidity sensor",
           "window_entity_id": "Window contact",
           "window_action_type": "Open-window action",
-          "window_custom_temperature": "Open-window custom temperature",
           "window_open_delay_seconds": "Open-window delay",
           "home_target_temperature": "Home target temperature",
           "away_target_type": "Away target type",
@@ -65,13 +64,22 @@
           "humidity_entity_id": "Optional display-only humidity source.",
           "window_entity_id": "Optional window-contact source for area automation.",
           "window_action_type": "Climate action applied after the configured window delay while the contact remains open.",
-          "window_custom_temperature": "Required only when the open-window action uses a custom temperature.",
           "window_open_delay_seconds": "Seconds the window contact must stay open before open-window automation activates.",
           "home_target_temperature": "Target temperature used when the effective presence is home.",
           "away_target_type": "Choose whether the away target is absolute or relative to the home target.",
           "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type.",
           "schedule_home_start": "Daily local time when the profile starts using the home target while presence is home.",
           "schedule_home_end": "Daily local time when the profile returns to the away target."
+        }
+      },
+      "window_custom_temperature": {
+        "title": "Open-window Action: Custom Temperature",
+        "description": "Set the custom temperature required because Open-window action is set to Use custom temperature. The other Regulation Profile changes are still pending. Closing this step cancels the current Regulation Profile changes.",
+        "data": {
+          "window_custom_temperature": "Open-window custom temperature"
+        },
+        "data_description": {
+          "window_custom_temperature": "Required because Open-window action is set to Use custom temperature."
         }
       }
     },
@@ -81,7 +89,9 @@
       "primary_climate_required": "Select exactly one primary climate entity.",
       "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first.",
       "schedule_window_required": "Choose different start and end times for the daily home schedule.",
-      "window_custom_temperature_required": "Set a custom temperature or choose a different open-window action."
+      "window_custom_temperature_required": "Set the custom temperature for the selected open-window action.",
+      "window_custom_temperature_invalid": "Enter a valid custom temperature.",
+      "window_custom_temperature_range": "Choose a custom temperature between 5 and 35 °C."
     }
   },
   "selector": {

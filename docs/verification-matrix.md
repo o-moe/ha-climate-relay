@@ -67,12 +67,10 @@ Epic 2 contributes the following executable evidence:
   `scripts/run_epic_acceptance.py --epic 2`; release acceptance passed on
   2026-05-01 against `v0.2.0-alpha.7` on
   `http://haos-test.local:8123`
-- Deferred UX improvement: clearing the open-window custom temperature currently
-  surfaces Home Assistant's generic number-selector validation text
-  (`expected float`) before the integration-specific custom-temperature message
-  can be rendered. The Epic 2 acceptance runner treats this as a covered
-  blocking GUI error path, but the wording should be improved in a future
-  options-flow UX polish slice.
+- `V-DR-002`: Home Assistant options-flow UX structure documented in
+  `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
+  required selector values use dedicated follow-up steps with localized
+  integration-owned validation errors.
 
 ## Verification method legend
 
