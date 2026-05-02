@@ -1003,18 +1003,19 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         ]
         self.assertIsInstance(reset_time, selector.TimeSelector)
 
-    async def test_build_window_custom_temperature_schema_uses_text_number_selector(self) -> None:
+    async def test_build_window_custom_temperature_schema_uses_number_selector(self) -> None:
         schema = _build_window_custom_temperature_schema(12.5)
         validators = schema.schema
         custom_temperature = validators[
             next(key for key in validators if key.schema == CONF_WINDOW_CUSTOM_TEMPERATURE)
         ]
 
-        self.assertIsInstance(custom_temperature, selector.TextSelector)
+        self.assertIsInstance(custom_temperature, selector.NumberSelector)
         self.assertEqual(
-            custom_temperature.config["type"],
-            selector.TextSelectorType.NUMBER,
+            custom_temperature.config["mode"],
+            selector.NumberSelectorMode.BOX,
         )
+        self.assertEqual(custom_temperature.config["unit_of_measurement"], "°C")
 
     async def test_build_room_schema_uses_expected_selectors(self) -> None:
         schema = _build_room_schema(

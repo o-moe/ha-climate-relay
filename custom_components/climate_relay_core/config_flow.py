@@ -778,11 +778,14 @@ def _build_window_custom_temperature_schema(value: float | None) -> vol.Schema:
         {
             vol.Optional(
                 CONF_WINDOW_CUSTOM_TEMPERATURE,
-                default="" if value is None else str(value),
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(
-                    type=selector.TextSelectorType.NUMBER,
-                    suffix="°C",
+                default=value,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=5,
+                    max=35,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="°C",
                 )
             ),
         }
