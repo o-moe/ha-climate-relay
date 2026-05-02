@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.13"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.14"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 EPIC_2_PRIMARY_CLIMATES = (
@@ -823,6 +823,7 @@ async function selectEntity(selectorIndex, dialogName, optionText) {{
 }}
 
 async function selectNativeOption(selectorIndex, optionValue, optionLabel) {{
+  await installBrowserHelpers();
   const selector = page.locator("ha-selector-select").nth(selectorIndex);
   const nativeSelect = selector.locator("select").first();
   if (await nativeSelect.count()) {{
