@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.9"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.10"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 
@@ -745,7 +745,23 @@ async function setTextInput(selectorIndex, value) {{
   await input.fill(String(value));
   await input.dispatchEvent("input");
   await input.dispatchEvent("change");
-  await selector.evaluate((element, value) => {{
+  await page.evaluate(([index, value]) => {{
+    const matches = [];
+    function walk(root) {{
+      for (const element of root.querySelectorAll("*")) {{
+        if (element.localName === "ha-selector-text") {{
+          matches.push(element);
+        }}
+        if (element.shadowRoot) {{
+          walk(element.shadowRoot);
+        }}
+      }}
+    }}
+    walk(document);
+    const element = matches[index];
+    if (!element) {{
+      throw new Error(`Missing text selector host ${{index}}`);
+    }}
     const targets = [element];
     if (element.getRootNode().host) {{
       targets.push(element.getRootNode().host);
@@ -758,7 +774,7 @@ async function setTextInput(selectorIndex, value) {{
         detail: {{ value }},
       }}));
     }}
-  }}, String(value));
+  }}, [selectorIndex, String(value)]);
 }}
 
 async function setTimeInput(selectorIndex, hours, minutes) {{
