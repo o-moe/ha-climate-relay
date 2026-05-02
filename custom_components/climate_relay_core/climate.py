@@ -107,7 +107,12 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
 
     async def async_added_to_hass(self) -> None:
         """Register for upstream runtime and state changes."""
-        self.async_on_remove(self._runtime.subscribe(self._handle_runtime_update))
+        self.async_on_remove(
+            self._runtime.subscribe_for_profile(
+                self._room_config.profile_id,
+                self._handle_runtime_update,
+            )
+        )
         tracked_entities = [self._room_config.primary_climate_entity_id]
         if self._room_config.humidity_entity_id:
             tracked_entities.append(self._room_config.humidity_entity_id)

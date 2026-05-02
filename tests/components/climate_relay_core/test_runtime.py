@@ -169,7 +169,7 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
             room_configs,
         )
         subscriber = Mock()
-        runtime.subscribe(subscriber)
+        runtime.subscribe_for_profile(room_configs[0].profile_id, subscriber)
 
         with (
             patch(
@@ -506,6 +506,78 @@ class GlobalRuntimeTests(IsolatedAsyncioTestCase):
             runtime.manual_override_for_profile(room_configs[1].profile_id),
             bedroom_override,
         )
+
+    async def test_area_override_notifies_only_the_targeted_profile(self) -> None:
+        hass = Mock()
+        hass.states.get = Mock(return_value=SimpleNamespace(state="home"))
+        timezone = ZoneInfo("Europe/Berlin")
+        with patch(
+            "custom_components.climate_relay_core.runtime._resolve_area_reference",
+            side_effect=[
+                AreaReference(area_id="office", area_name="Office"),
+                AreaReference(area_id="bedroom", area_name="Bedroom"),
+            ],
+        ):
+            room_configs = build_room_configs(
+                {},
+                {
+                    "rooms": [
+                        {
+                            "primary_climate_entity_id": "climate.office",
+                            "home_target_temperature": 20.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 17.0,
+                        },
+                        {
+                            "primary_climate_entity_id": "climate.bedroom",
+                            "home_target_temperature": 19.0,
+                            "away_target_type": "absolute",
+                            "away_target_temperature": 16.0,
+                        },
+                    ]
+                },
+                hass=hass,
+            )
+        runtime = GlobalRuntime(hass, build_global_config({}, {}), room_configs)
+        office_subscriber = Mock()
+        bedroom_subscriber = Mock()
+        global_subscriber = Mock()
+        runtime.subscribe_for_profile(room_configs[0].profile_id, office_subscriber)
+        runtime.subscribe_for_profile(room_configs[1].profile_id, bedroom_subscriber)
+        runtime.subscribe(global_subscriber)
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            await runtime.async_set_area_override(
+                area_id="office",
+                target_temperature=22.0,
+                termination_type="never",
+                source="test",
+            )
+
+        office_subscriber.assert_called_once()
+        bedroom_subscriber.assert_not_called()
+        global_subscriber.assert_not_called()
+
+        await runtime.async_clear_area_override(area_id="office", source="test")
+
+        self.assertEqual(office_subscriber.call_count, 2)
+        bedroom_subscriber.assert_not_called()
+        global_subscriber.assert_not_called()
+
+        await runtime.async_set_global_mode(GlobalMode.HOME, source="test")
+
+        self.assertEqual(office_subscriber.call_count, 3)
+        bedroom_subscriber.assert_called_once()
+        global_subscriber.assert_called_once()
 
     async def test_build_room_configs_uses_default_target_type_and_optional_entities(self) -> None:
         (room_config,) = build_room_configs(

@@ -575,6 +575,100 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(entity.async_write_ha_state.call_count, 2)
+        entity._runtime.subscribe_for_profile.assert_called_once_with(
+            entity._room_config.profile_id,
+            entity._handle_runtime_update,
+        )
+
+    async def test_profile_scoped_runtime_update_applies_only_targeted_area(self) -> None:
+        hass = Mock()
+        hass.services.async_call = AsyncMock()
+        hass.async_create_task = Mock(side_effect=lambda coro: asyncio.create_task(coro))
+
+        def get_state(entity_id: str) -> object | None:
+            mapping = {
+                "climate.office": SimpleNamespace(
+                    state="heat",
+                    attributes={"temperature": 20.0},
+                ),
+                "climate.bedroom": SimpleNamespace(
+                    state="heat",
+                    attributes={"temperature": 18.0},
+                ),
+            }
+            return mapping.get(entity_id)
+
+        hass.states.get = Mock(side_effect=get_state)
+
+        runtime = Mock()
+        runtime.effective_presence = EffectivePresence.HOME
+        runtime.config = build_global_config({}, {})
+        runtime.subscribe_for_profile = Mock(return_value=lambda: None)
+        runtime.manual_override_for_profile = Mock(
+            side_effect=lambda profile_id: (
+                SimpleNamespace(target_temperature=22.0, ends_at=None)
+                if profile_id == "climate_office"
+                else None
+            )
+        )
+        runtime.next_manual_override_reset_at = Mock(return_value=None)
+        room_configs = build_room_configs(
+            {},
+            {
+                CONF_ROOMS: [
+                    {
+                        "primary_climate_entity_id": "climate.office",
+                        "home_target_temperature": 20.0,
+                        "away_target_type": "absolute",
+                        "away_target_temperature": 17.0,
+                    },
+                    {
+                        "primary_climate_entity_id": "climate.bedroom",
+                        "home_target_temperature": 19.0,
+                        "away_target_type": "absolute",
+                        "away_target_temperature": 16.0,
+                    },
+                ]
+            },
+        )
+        office_entity = ClimateRelayCoreRoomClimateEntity(
+            "entry-1",
+            hass,
+            runtime,
+            room_configs[0],
+        )
+        bedroom_entity = ClimateRelayCoreRoomClimateEntity(
+            "entry-1",
+            hass,
+            runtime,
+            room_configs[1],
+        )
+        office_entity.async_write_ha_state = Mock()
+        bedroom_entity.async_write_ha_state = Mock()
+
+        with patch.object(
+            climate_platform.dt_util,
+            "now",
+            return_value=datetime(
+                2026,
+                4,
+                29,
+                12,
+                0,
+                tzinfo=climate_platform.dt_util.DEFAULT_TIME_ZONE,
+            ),
+        ):
+            office_entity._handle_runtime_update()
+            await asyncio.sleep(0)
+
+        office_entity.async_write_ha_state.assert_called_once()
+        bedroom_entity.async_write_ha_state.assert_not_called()
+        hass.services.async_call.assert_awaited_once_with(
+            "climate",
+            "set_temperature",
+            {"entity_id": "climate.office", "temperature": 22.0},
+            blocking=True,
+        )
 
     async def test_rescheduling_replaces_callback_without_registering_extra_remove_hooks(
         self,
@@ -657,6 +751,51 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         async_add_entities.assert_called_once()
         (entity,) = async_add_entities.call_args.args[0]
         self.assertIsInstance(entity, ClimateRelayCoreRoomClimateEntity)
+
+    async def test_setup_entry_adds_entities_for_multiple_configured_profiles(self) -> None:
+        hass = Mock()
+        hass.data = {
+            DOMAIN: {
+                "entry-1": {
+                    "runtime": Mock(
+                        effective_presence=EffectivePresence.HOME,
+                        config=build_global_config({}, {}),
+                    ),
+                    "room_configs": build_room_configs(
+                        {},
+                        {
+                            CONF_ROOMS: [
+                                {
+                                    "primary_climate_entity_id": "climate.office",
+                                    "home_target_temperature": 20.0,
+                                    "away_target_type": "absolute",
+                                    "away_target_temperature": 17.0,
+                                },
+                                {
+                                    "primary_climate_entity_id": "climate.bedroom",
+                                    "home_target_temperature": 19.0,
+                                    "away_target_type": "absolute",
+                                    "away_target_temperature": 16.0,
+                                },
+                            ]
+                        },
+                    ),
+                    "title": "Climate Relay",
+                }
+            }
+        }
+        entry = SimpleNamespace(entry_id="entry-1", title="Climate Relay")
+        async_add_entities = Mock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args.args[0]
+        self.assertEqual(len(entities), 2)
+        self.assertEqual(
+            {entity._room_config.primary_climate_entity_id for entity in entities},
+            {"climate.office", "climate.bedroom"},
+        )
 
     async def test_setup_entry_adds_no_entities_when_no_room_is_configured(self) -> None:
         hass = Mock()
