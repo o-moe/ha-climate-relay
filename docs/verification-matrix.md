@@ -63,9 +63,10 @@ Epic 2 contributes the following executable evidence:
   close-time reevaluation coverage in
   `tests/components/climate_relay_core/test_rules.py` and
   `tests/components/climate_relay_core/test_climate.py`; full Epic 2
-  options-flow GUI regression and API open/close acceptance path prepared in
+  options-flow GUI regression with deterministic baseline preparation and API
+  open/close acceptance path prepared in
   `scripts/run_epic_acceptance.py --epic 2`; release acceptance passed on
-  2026-05-01 against `v0.2.0-alpha.7` on
+  2026-05-02 against `v0.2.0-alpha.11` on
   `http://haos-test.local:8123`
 - `V-DR-002`: Home Assistant options-flow UX structure documented in
   `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
