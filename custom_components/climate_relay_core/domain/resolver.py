@@ -7,24 +7,29 @@ from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from .models import RoomTarget
+from .models import EffectiveTarget, RoomTarget
 from .modes import EffectivePresence
 from .overrides import ManualOverride
 from .rooms import resolve_room_target
 from .schedules import RoomSchedule, evaluate_schedule
 
-RegulationContext = Literal["manual_override", "schedule", "fallback"]
+RegulationContext = Literal["window_override", "manual_override", "schedule", "fallback"]
 
 
 @dataclass(frozen=True, slots=True)
 class RegulationResolution:
     """Resolved effective regulation state for one area-bound profile."""
 
-    target_temperature: float
+    effective_target: EffectiveTarget
     active_context: RegulationContext
     next_change_at: datetime | None
     override_ends_at: datetime | None
     window_priority_pending: bool = False
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Return the resolved target temperature when the target includes one."""
+        return self.effective_target.target_temperature
 
 
 def resolve_regulation_state(
@@ -34,15 +39,28 @@ def resolve_regulation_state(
     schedule: RoomSchedule,
     effective_presence: EffectivePresence,
     manual_override: ManualOverride | None,
+    window_target: EffectiveTarget | None = None,
     primary_available: bool,
     fallback_temperature: float,
     now: datetime,
     timezone: ZoneInfo,
 ) -> RegulationResolution:
-    """Resolve the effective regulation state with Epic 1 priority order."""
+    """Resolve the effective regulation state with deterministic rule priority."""
+    if window_target is not None:
+        return RegulationResolution(
+            effective_target=window_target,
+            active_context="window_override",
+            next_change_at=None,
+            override_ends_at=None,
+        )
+
     if manual_override is not None:
         return RegulationResolution(
-            target_temperature=manual_override.target_temperature,
+            effective_target=EffectiveTarget(
+                hvac_mode="heat",
+                preset_mode=None,
+                target_temperature=manual_override.target_temperature,
+            ),
             active_context="manual_override",
             next_change_at=None,
             override_ends_at=manual_override.ends_at,
@@ -50,7 +68,11 @@ def resolve_regulation_state(
 
     if not primary_available:
         return RegulationResolution(
-            target_temperature=fallback_temperature,
+            effective_target=EffectiveTarget(
+                hvac_mode="heat",
+                preset_mode=None,
+                target_temperature=fallback_temperature,
+            ),
             active_context="fallback",
             next_change_at=None,
             override_ends_at=None,
@@ -58,10 +80,14 @@ def resolve_regulation_state(
 
     if effective_presence is EffectivePresence.AWAY:
         return RegulationResolution(
-            target_temperature=resolve_room_target(
-                EffectivePresence.AWAY,
-                home_target=home_target,
-                away_target=away_target,
+            effective_target=EffectiveTarget(
+                hvac_mode="heat",
+                preset_mode=None,
+                target_temperature=resolve_room_target(
+                    EffectivePresence.AWAY,
+                    home_target=home_target,
+                    away_target=away_target,
+                ),
             ),
             active_context="schedule",
             next_change_at=None,
@@ -75,10 +101,14 @@ def resolve_regulation_state(
         else EffectivePresence.AWAY
     )
     return RegulationResolution(
-        target_temperature=resolve_room_target(
-            schedule_presence,
-            home_target=home_target,
-            away_target=away_target,
+        effective_target=EffectiveTarget(
+            hvac_mode="heat",
+            preset_mode=None,
+            target_temperature=resolve_room_target(
+                schedule_presence,
+                home_target=home_target,
+                away_target=away_target,
+            ),
         ),
         active_context="schedule",
         next_change_at=schedule_evaluation.next_change_at,

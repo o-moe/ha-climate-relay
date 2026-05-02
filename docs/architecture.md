@@ -64,6 +64,20 @@ model.
   Full durable runtime persistence is deliberately deferred to the persistence
   epic because adding it here would broaden product behavior beyond hardening.
 
+## Epic 2 window automation decisions
+
+- Window override is part of the central pure-Python resolver and has the
+  highest rule priority.
+- The Home Assistant climate entity owns only framework adaptation: it observes
+  the configured binary sensor, manages delayed activation, maps
+  primary-climate capabilities, and passes an already resolved window target
+  into the domain resolver.
+- Window close clears the active window override and runs normal rule
+  evaluation at close time instead of restoring a stored pre-window target.
+- Window action mapping remains generic and capability-based. Unsupported
+  `off` and `frost_protection` actions fall back to the primary climate
+  minimum temperature.
+
 ## Future multi-profile configuration
 
 Runtime data structures already accept more than one regulation profile when
@@ -90,3 +104,22 @@ The frontend will eventually provide:
 The frontend should never become the primary owner of behavioral logic or of
 house-structure identity. It should consume Home Assistant area and floor data
 for navigation and layer ClimateRelayCore state on top.
+
+## Options-flow UX structure
+
+Home Assistant config and options flows are modeled as explicit multi-step data
+entry flows. Climate Relay treats fields as always-visible only when an empty
+value is a valid saved state. Fields that become required because of a previous
+toggle, mode, or action selection are collected in a dedicated follow-up step.
+
+Dedicated conditional steps must:
+
+- name or describe the selection that made the field required
+- keep pending values from previous steps until the flow is completed
+- return localized integration-owned validation errors
+- avoid relying on generic selector/schema errors for expected user mistakes
+
+This pattern is used by the daily manual-override reset time and by the
+open-window custom-temperature action. Future conditional fields should follow
+the same structure unless Home Assistant introduces a canonical conditional
+field mechanism that supersedes it.

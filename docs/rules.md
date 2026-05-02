@@ -52,12 +52,14 @@ The schedule domain model also validates the planned broader layouts:
 
 Priority order:
 
-1. manual area override
-2. effective global mode and area schedule
-3. fallback state
+1. window override
+2. manual area override
+3. effective global mode and area schedule
+4. fallback state
 
-The domain resolver contains an explicit window-priority placeholder for Epic 2,
-but Epic 1 does not enable window automation as user-facing behavior.
+Epic 2 enables the window-priority branch for configured window contacts. Window
+override is evaluated before manual override so open-window protection remains
+deterministic while the contact is active.
 
 ## Window override
 
@@ -70,7 +72,12 @@ When a configured window contact opens:
 When the window closes:
 
 1. clear window override
-2. restore the last valid room state
+2. reevaluate the full rule stack using the state that is valid at close time
+
+Close-time reevaluation intentionally does not restore a stale pre-window
+snapshot. If the schedule, global mode, or manual override changed while the
+window was open, the area resolves to that current state after the window
+closes.
 
 ## Manual area override
 

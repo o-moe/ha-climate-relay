@@ -441,7 +441,7 @@ area state resolution:
   changes.
 - Fit criterion: A window that closes before the delay expires does not activate
   window override.
-- Status: Confirmed direction
+- Status: Confirmed by implementation
 
 #### FR-031 Supported window actions
 
@@ -518,7 +518,7 @@ area state resolution:
   an outdated pre-window snapshot.
 - Fit criterion: After window close, the resolved area target matches the
   result of normal rule evaluation at that time.
-- Status: Confirmed direction
+- Status: Confirmed by implementation
 
 Examples:
 

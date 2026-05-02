@@ -51,6 +51,8 @@
           "primary_climate_entity_id": "Primary climate entity",
           "humidity_entity_id": "Humidity sensor",
           "window_entity_id": "Window contact",
+          "window_action_type": "Open-window action",
+          "window_open_delay_seconds": "Open-window delay",
           "home_target_temperature": "Home target temperature",
           "away_target_type": "Away target type",
           "away_target_temperature": "Away target value",
@@ -60,12 +62,24 @@
         "data_description": {
           "primary_climate_entity_id": "Required source climate entity. Its Home Assistant area is reused for Climate Relay placement.",
           "humidity_entity_id": "Optional display-only humidity source.",
-          "window_entity_id": "Optional window-contact source for later area automation slices.",
+          "window_entity_id": "Optional window-contact source for area automation.",
+          "window_action_type": "Climate action applied after the configured window delay while the contact remains open.",
+          "window_open_delay_seconds": "Seconds the window contact must stay open before open-window automation activates.",
           "home_target_temperature": "Target temperature used when the effective presence is home.",
           "away_target_type": "Choose whether the away target is absolute or relative to the home target.",
           "away_target_temperature": "Absolute away temperature or relative delta, depending on the selected away target type.",
           "schedule_home_start": "Daily local time when the profile starts using the home target while presence is home.",
           "schedule_home_end": "Daily local time when the profile returns to the away target."
+        }
+      },
+      "window_custom_temperature": {
+        "title": "Open-window Action: Custom Temperature",
+        "description": "Set the custom temperature required because Open-window action is set to Use custom temperature. The other Regulation Profile changes are still pending. Closing this step cancels the current Regulation Profile changes.",
+        "data": {
+          "window_custom_temperature": "Open-window custom temperature"
+        },
+        "data_description": {
+          "window_custom_temperature": "Required because Open-window action is set to Use custom temperature."
         }
       }
     },
@@ -74,7 +88,10 @@
       "reset_time_required": "This field is required when the daily override reset is enabled.",
       "primary_climate_required": "Select exactly one primary climate entity.",
       "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first.",
-      "schedule_window_required": "Choose different start and end times for the daily home schedule."
+      "schedule_window_required": "Choose different start and end times for the daily home schedule.",
+      "window_custom_temperature_required": "Set the custom temperature for the selected open-window action.",
+      "window_custom_temperature_invalid": "Enter a valid custom temperature.",
+      "window_custom_temperature_range": "Choose a custom temperature between 5 and 35 °C."
     }
   },
   "selector": {
@@ -88,6 +105,14 @@
       "options": {
         "absolute": "Absolute temperature",
         "relative": "Relative delta"
+      }
+    },
+    "window_action_type": {
+      "options": {
+        "off": "Turn off if supported",
+        "frost_protection": "Use frost protection if supported",
+        "minimum_temperature": "Use minimum temperature",
+        "custom_temperature": "Use custom temperature"
       }
     }
   },

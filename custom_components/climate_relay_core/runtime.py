@@ -32,12 +32,17 @@ from .const import (
     CONF_SCHEDULE,
     CONF_SCHEDULE_HOME_END,
     CONF_SCHEDULE_HOME_START,
+    CONF_WINDOW_ACTION_TYPE,
+    CONF_WINDOW_CUSTOM_TEMPERATURE,
     CONF_WINDOW_ENTITY_ID,
+    CONF_WINDOW_OPEN_DELAY_SECONDS,
     DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_SCHEDULE_HOME_END,
     DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
+    DEFAULT_WINDOW_ACTION_TYPE,
+    DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
 )
 from .domain import (
     EffectivePresence,
@@ -47,6 +52,7 @@ from .domain import (
     RoomSchedule,
     RoomTarget,
     UnknownStateHandling,
+    WindowActionType,
     build_daily_home_window_schedule,
     build_manual_override,
     evaluate_schedule,
@@ -92,6 +98,9 @@ class RegulationProfileConfig:
     area_name: str | None
     humidity_entity_id: str | None
     window_entity_id: str | None
+    window_action_type: WindowActionType
+    window_custom_temperature: float | None
+    window_open_delay_seconds: int
     home_target: RoomTarget
     away_target: RoomTarget
     schedule: RoomSchedule
@@ -353,6 +362,9 @@ def build_room_configs(
                 area_name=area_reference.area_name,
                 humidity_entity_id=room[CONF_HUMIDITY_ENTITY_ID],
                 window_entity_id=room[CONF_WINDOW_ENTITY_ID],
+                window_action_type=WindowActionType(room[CONF_WINDOW_ACTION_TYPE]),
+                window_custom_temperature=room[CONF_WINDOW_CUSTOM_TEMPERATURE],
+                window_open_delay_seconds=room[CONF_WINDOW_OPEN_DELAY_SECONDS],
                 home_target=RoomTarget(
                     mode="absolute",
                     temperature=room[CONF_HOME_TARGET_TEMPERATURE],
@@ -439,6 +451,16 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
             raw_value.get(CONF_WINDOW_ENTITY_ID),
             required=False,
         ),
+        CONF_WINDOW_ACTION_TYPE: _normalize_window_action_type(
+            raw_value.get(CONF_WINDOW_ACTION_TYPE)
+        ),
+        CONF_WINDOW_CUSTOM_TEMPERATURE: _normalize_optional_float(
+            raw_value.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
+        ),
+        CONF_WINDOW_OPEN_DELAY_SECONDS: _normalize_non_negative_int(
+            raw_value.get(CONF_WINDOW_OPEN_DELAY_SECONDS),
+            default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+        ),
         CONF_HOME_TARGET_TEMPERATURE: float(raw_value.get(CONF_HOME_TARGET_TEMPERATURE)),
         CONF_AWAY_TARGET_TYPE: _normalize_target_type(raw_value.get(CONF_AWAY_TARGET_TYPE)),
         CONF_AWAY_TARGET_TEMPERATURE: float(raw_value.get(CONF_AWAY_TARGET_TEMPERATURE)),
@@ -491,6 +513,31 @@ def _normalize_target_type(raw_value: object) -> str:
     if isinstance(normalized, str) and normalized in {"absolute", "relative"}:
         return normalized
     return DEFAULT_AWAY_TARGET_TYPE
+
+
+def _normalize_window_action_type(raw_value: object) -> str:
+    """Normalize the configured window action type."""
+    normalized = _normalize_optional_value(raw_value)
+    if isinstance(normalized, str) and normalized in {action.value for action in WindowActionType}:
+        return normalized
+    return DEFAULT_WINDOW_ACTION_TYPE
+
+
+def _normalize_optional_float(raw_value: object) -> float | None:
+    """Normalize an optional float selector value."""
+    normalized = _normalize_optional_value(raw_value)
+    if normalized in (None, ""):
+        return None
+    return float(normalized)
+
+
+def _normalize_non_negative_int(raw_value: object, *, default: int) -> int:
+    """Normalize a non-negative integer selector value."""
+    normalized = _normalize_optional_value(raw_value)
+    if normalized in (None, ""):
+        return default
+    value = int(normalized)
+    return value if value >= 0 else default
 
 
 def _normalize_optional_value(raw_value: object) -> object:

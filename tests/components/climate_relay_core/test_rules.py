@@ -165,6 +165,56 @@ class ResolveRegulationStateTests(unittest.TestCase):
         self.assertEqual(result.active_context, "manual_override")
         self.assertEqual(result.override_ends_at, ends_at)
 
+    def test_window_override_precedes_manual_override_and_schedule(self) -> None:
+        ends_at = datetime(2026, 4, 30, 8, 0, tzinfo=self.timezone)
+        override = ManualOverride(
+            profile_id="climate_living_room",
+            area_id="living_room",
+            target_temperature=23.0,
+            termination_type="until_time",
+            created_at=datetime(2026, 4, 30, 7, 0, tzinfo=self.timezone),
+            ends_at=ends_at,
+        )
+
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.HOME,
+            manual_override=override,
+            window_target=EffectiveTarget(
+                hvac_mode="heat",
+                preset_mode=None,
+                target_temperature=7.0,
+            ),
+            primary_available=True,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 7, 15, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 7.0)
+        self.assertEqual(result.active_context, "window_override")
+        self.assertIsNone(result.next_change_at)
+        self.assertIsNone(result.override_ends_at)
+
+    def test_window_close_reevaluates_against_current_schedule(self) -> None:
+        result = resolve_regulation_state(
+            home_target=self.home_target,
+            away_target=self.away_target,
+            schedule=self.schedule,
+            effective_presence=EffectivePresence.HOME,
+            manual_override=None,
+            window_target=None,
+            primary_available=True,
+            fallback_temperature=16.0,
+            now=datetime(2026, 4, 30, 23, 0, tzinfo=self.timezone),
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(result.target_temperature, 17.0)
+        self.assertEqual(result.active_context, "schedule")
+
     def test_fallback_applies_when_primary_is_unavailable(self) -> None:
         result = resolve_regulation_state(
             home_target=self.home_target,

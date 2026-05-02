@@ -59,6 +59,20 @@ contract:
   executable iteration acceptance runner in the same increment. The runner is
   part of the delivery artifact and must be usable as regression evidence for
   later iterations.
+- GUI/UX acceptance for each increment must be complete for the user flows it
+  touches. It must automate successful flows and validation/error paths in the
+  real Home Assistant UI, including selector behavior, step transitions,
+  persistence, and any affected cancel or close behavior. A happy-path-only GUI
+  smoke test is not sufficient for an increment that changes UI/UX behavior.
+- When UI configuration controls backend runtime behavior, the increment
+  acceptance runner must configure the feature through the UI and then verify
+  the resulting backend state or action through Home Assistant state, services,
+  or another executable runtime observation.
+- Home Assistant option fields that are conditionally required by a selected
+  mode, toggle, or action must follow the established dedicated-step pattern
+  instead of remaining as always-visible optional fields. The dedicated step
+  must explicitly identify the selection that made the field required and must
+  expose integration-owned localized validation errors.
 
 ## Increment slicing policy
 

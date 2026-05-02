@@ -97,6 +97,14 @@ This document defines the non-negotiable engineering expectations for this repos
   user-facing inputs instead of generic Python container types.
 - Conditional user inputs shall be modeled as conditional form structure where
   feasible, not merely as optional validators on always-visible fields.
+- In Home Assistant config/options flows, fields that are truly optional may
+  remain in the parent step. Fields that become required because of a selected
+  mode, toggle, or action shall use a dedicated follow-up step when HA selector
+  schema validation would otherwise preempt integration-owned validation and
+  localized errors.
+- Dedicated conditional steps must name the selected mode, toggle, or action in
+  their title or description, and their field descriptions must make clear that
+  the value is required because of that preceding selection.
 - User-facing entity names, states, and config labels shall be defined through
   Home Assistant localization files rather than hardcoded UI strings.
 - Changes to `strings.json` and translated runtime strings shall be kept in sync.
@@ -117,6 +125,19 @@ This document defines the non-negotiable engineering expectations for this repos
   instance, install the intended build or release version, prepare required
   fixtures, execute API smoke checks, and run the relevant Playwright Chromium
   GUI checks.
+- GUI/UX acceptance must cover the complete user flow introduced or changed by
+  the increment, not only one happy-path smoke check. For config flows, options
+  flows, dialogs, and dashboard flows this includes field visibility, selector
+  behavior, successful persistence, step transitions, cancel or close behavior
+  when relevant, and all validation error paths introduced or affected by the
+  increment.
+- If an increment changes both UI configuration and backend runtime behavior,
+  the acceptance runner must connect those surfaces end to end: configure the
+  behavior through the real UI, then verify the resulting runtime state or
+  action through Home Assistant state or services.
+- An alpha, beta, or stable release candidate is not acceptable when newly
+  introduced or changed automatable GUI/UX behavior lacks full executable GUI
+  regression coverage for both success and error paths.
 - At epic closure, increment-level acceptance details shall be consolidated
   into an epic-level smoke-suite document.
 - Manual HA acceptance may supplement the executable runner, but it shall not

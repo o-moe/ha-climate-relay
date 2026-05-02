@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/o-moe/ha-climate-relay/issues",
   "loggers": ["custom_components.climate_relay_core"],
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
