@@ -631,6 +631,8 @@ def _normalize_optional_float_selector(raw_value: Any) -> float | None:
     normalized = _unwrap_selector_value(raw_value)
     if normalized in (None, ""):
         return None
+    if isinstance(normalized, str):
+        normalized = normalized.strip().replace(",", ".")
     return float(normalized)
 
 
