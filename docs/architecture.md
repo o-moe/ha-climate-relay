@@ -80,9 +80,17 @@ model.
 
 ## Future multi-profile configuration
 
-Runtime data structures already accept more than one regulation profile when
-configuration supplies them. The user-facing config and options flows remain
-single-profile in Epic 1.
+Runtime data structures accept more than one regulation profile when
+configuration supplies them. Epic 2 / Increment 2.2 adds a bounded runtime
+update baseline: profile-local events such as manual area overrides notify only
+the affected regulation profile, while global configuration and presence-mode
+changes still fan out to all profile entities.
+
+The user-facing config and options flows remain single-profile at this point.
+Full multi-profile add, edit, remove, and persistence UX is deferred until the
+dedicated multi-profile configuration slice because it requires complete
+Home Assistant GUI acceptance coverage for success, validation, cancellation,
+and persistence paths.
 
 The future multi-profile model should add:
 

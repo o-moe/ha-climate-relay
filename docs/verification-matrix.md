@@ -68,10 +68,22 @@ Epic 2 contributes the following executable evidence:
   `scripts/run_epic_acceptance.py --epic 2`; release acceptance passed on
   2026-05-02 against `v0.2.0-alpha.11` on
   `http://haos-test.local:8123`
+- `V-UT-004`, `V-IT-002`, `V-IT-003`, `V-DR-001`: Epic 2 multi-area runtime
+  baseline coverage in `tests/components/climate_relay_core/test_runtime.py`
+  and `tests/components/climate_relay_core/test_climate.py`; evidence covers
+  multiple configured primary-climate-anchored profiles, per-profile climate
+  entity creation, scoped `set_area_override` and `clear_area_override`
+  notifications, and bounded reevaluation so unrelated area changes do not
+  force all profile entities to apply targets.
 - `V-DR-002`: Home Assistant options-flow UX structure documented in
   `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
   required selector values use dedicated follow-up steps with localized
   integration-owned validation errors.
+- Deferred Epic 2 evidence: full multi-profile Add/Edit/Remove options-flow
+  acceptance is not part of the Increment 2.2 runtime baseline because the
+  user-facing options flow remains intentionally single-profile. It must be
+  added with complete GUI success, error, cancel, and persistence coverage in
+  the future multi-profile configuration slice.
 
 ## Verification method legend
 
@@ -190,7 +202,7 @@ the saved UI configuration.
 | `FR-048` | Optional global reset time for manual overrides | `UT`, `IT` | `V-UT-005`, `V-IT-003` |
 | `FR-049` | Global reset option disabled by default | `IT`, `DR` | `V-IT-001`, `V-DR-003` |
 | `FR-066` | Next-occurrence semantics for fixed clock times | `UT`, `AT` | `V-UT-008`, `V-AT-002` |
-| `FR-070` | Room-scoped override operations | `IT`, `DR` | `V-IT-003`, `V-DR-002` |
+| `FR-070` | Room-scoped override operations | `IT`, `DR` | `V-IT-003`, `V-DR-001`, `V-DR-002` |
 | `FR-071` | UI-orchestrated batch actions | `DR`, `AT` | `V-DR-002`, `V-AT-004` |
 | `FR-073` | Minimal runtime command set | `IT`, `DR` | `V-IT-003`, `V-DR-003` |
 | `FR-074` | Replacing an active room override | `UT`, `AT` | `V-UT-005`, `V-AT-002` |
@@ -267,7 +279,7 @@ the saved UI configuration.
 | `QR-011` | Separation of concerns | `DR` | `V-DR-001` |
 | `QR-012` | Minimal public interface complexity | `DR`, `IT` | `V-DR-003`, `V-IT-006` |
 | `QR-020` | Bounded rule evaluation latency | `UT`, `DR` | `V-UT-004`, `V-DR-001` |
-| `QR-021` | Efficient room update scaling | `UT`, `IT`, `DR` | `V-UT-004`, `V-IT-005`, `V-DR-001` |
+| `QR-021` | Efficient room update scaling | `UT`, `IT`, `DR` | `V-UT-004`, `V-IT-002`, `V-IT-003`, `V-DR-001` |
 | `QR-030` | Deterministic degraded behavior | `UT`, `IT`, `AT` | `V-UT-007`, `V-IT-005`, `V-AT-005` |
 | `QR-031` | Restart-safe recomputation | `UT`, `IT`, `AT` | `V-UT-008`, `V-IT-004`, `V-AT-005` |
 | `QR-040` | User-visible degraded-state indication | `IT`, `AT` | `V-IT-005`, `V-AT-004` |

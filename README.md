@@ -13,9 +13,10 @@ climate control.
 - configurable handling for `unknown` and `unavailable` person states
 - a configurable fallback target temperature for required-component failure
 - optional simulation mode for dry-run observation without device actuation
-- one daily schedule window for the first area-bound regulation profile
-- manual overrides for the first area-bound regulation profile through Home Assistant services
-- delayed open-window automation for the first area-bound regulation profile
+- one daily schedule window for configured area-bound regulation profiles
+- manual overrides for configured area-bound regulation profiles through Home Assistant services
+- delayed open-window automation for configured area-bound regulation profiles
+- bounded multi-area runtime behavior when more than one profile is configured
 - optional verbose diagnostic logging
 
 ## Installation
@@ -87,10 +88,13 @@ The options dialog includes short inline explanations. At a high level:
 After a successful installation and setup, Home Assistant currently exposes:
 
 - one `select` entity named `Presence Control`
-- one area-level `climate` entity for the configured regulation profile
+- one area-level `climate` entity for each configured regulation profile
 - services named `climate_relay_core.set_global_mode`,
   `climate_relay_core.set_area_override`, and
   `climate_relay_core.clear_area_override`
+
+The current Home Assistant options dialog still edits one regulation profile.
+Full multi-profile add, edit, and remove UX is planned for a later Epic 2 slice.
 
 ## How To Use It
 
