@@ -45,6 +45,12 @@ from .const import (
 from .runtime import _resolve_area_reference
 
 _LOGGER = logging.getLogger(__name__)
+CONF_PROFILE_ACTION = "profile_action"
+CONF_PROFILE_INDEX = "profile_index"
+PROFILE_ACTION_ADD = "add"
+PROFILE_ACTION_EDIT = "edit"
+PROFILE_ACTION_REMOVE = "remove"
+PROFILE_ACTION_FINISH = "finish"
 
 
 class ClimateRelayCoreConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -81,7 +87,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self._pending_options: dict[str, Any] | None = None
+        self._pending_rooms: list[dict[str, Any]] | None = None
         self._pending_room: dict[str, Any] | None = None
+        self._editing_room_index: int | None = None
+        self._profile_management_active = False
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -128,7 +137,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         **self._pending_options,
                         CONF_MANUAL_OVERRIDE_RESET_TIME: None,
                     }
-                    return await self.async_step_room()
+                    return await self.async_step_profiles()
             except Exception:
                 _LOGGER.exception(
                     "Failed to validate global settings payload: %r; defaults=%r",
@@ -162,7 +171,7 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         **pending_options,
                         CONF_MANUAL_OVERRIDE_RESET_TIME: normalized_time,
                     }
-                    return await self.async_step_room()
+                    return await self.async_step_profiles()
             except Exception:
                 _LOGGER.exception(
                     "Failed to validate reset-time payload: %r; pending_options=%r",
@@ -180,29 +189,92 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
             errors=errors,
         )
 
+    async def async_step_profiles(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage configured regulation profiles."""
+        errors: dict[str, str] = {}
+        rooms = self._current_pending_rooms()
+
+        if user_input is not None:
+            try:
+                action = _normalize_select_value(user_input.get(CONF_PROFILE_ACTION))
+                if action == PROFILE_ACTION_ADD:
+                    self._profile_management_active = True
+                    self._pending_room = None
+                    self._editing_room_index = None
+                    return await self.async_step_room()
+                if action == PROFILE_ACTION_EDIT:
+                    if not rooms:
+                        errors[CONF_PROFILE_ACTION] = "profile_required"
+                    else:
+                        self._profile_management_active = True
+                        return await self.async_step_profile_select_edit()
+                elif action == PROFILE_ACTION_REMOVE:
+                    if not rooms:
+                        errors[CONF_PROFILE_ACTION] = "profile_required"
+                    else:
+                        self._profile_management_active = True
+                        return await self.async_step_profile_select_remove()
+                elif action == PROFILE_ACTION_FINISH:
+                    if not rooms:
+                        errors[CONF_PROFILE_ACTION] = "profile_required"
+                    else:
+                        return self._create_options_entry(rooms)
+                else:
+                    errors[CONF_PROFILE_ACTION] = "profile_action_required"
+            except Exception:
+                _LOGGER.exception("Failed to validate profile action payload: %r", user_input)
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="profiles",
+            data_schema=_build_profiles_schema(rooms),
+            errors=errors,
+        )
+
+    async def async_step_profile_select_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select the regulation profile to edit."""
+        return await self._async_select_profile(user_input, remove=False)
+
+    async def async_step_profile_select_remove(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select the regulation profile to remove."""
+        return await self._async_select_profile(user_input, remove=True)
+
     async def async_step_room(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Collect the first regulation-profile baseline configuration."""
+        """Collect one regulation-profile configuration."""
         errors: dict[str, str] = {}
-        room_values = _normalize_room_options(
-            (_normalize_rooms(self._config_entry.options) or [_default_room_data()])[0]
-        )
+        rooms = self._current_pending_rooms()
+        room_values = self._room_values_for_edit(rooms)
 
         if user_input is not None:
             try:
                 submitted = _normalize_room_options(_merge_room_submission(room_values, user_input))
                 submitted = _resolve_room_entity_ids(self.hass, submitted)
+                area_id = None
                 if not submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID]:
                     errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
-                elif (
-                    _resolve_area_reference(
+                else:
+                    area_id = _resolve_area_reference(
                         self.hass,
                         submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID],
                     ).area_id
-                    is None
-                ):
-                    errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
+                    if area_id is None:
+                        errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_area_required"
+                    elif _has_duplicate_profile_anchor(
+                        self.hass,
+                        rooms,
+                        submitted[CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                        area_id,
+                        exclude_index=self._editing_room_index,
+                    ):
+                        errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "profile_duplicate_area"
                 if submitted[CONF_SCHEDULE_HOME_START] == submitted[CONF_SCHEDULE_HOME_END]:
                     errors[CONF_SCHEDULE_HOME_END] = "schedule_window_required"
                 if not errors:
@@ -210,13 +282,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         self._pending_room = submitted
                         return await self.async_step_window_custom_temperature()
                     submitted = {**submitted, CONF_WINDOW_CUSTOM_TEMPERATURE: None}
-                    return self.async_create_entry(
-                        title="",
-                        data={
-                            **(self._pending_options or {}),
-                            CONF_ROOMS: [submitted],
-                        },
-                    )
+                    self._store_pending_room(submitted)
+                    if not self._profile_management_active:
+                        return self._create_options_entry(self._current_pending_rooms())
+                    return await self.async_step_profiles()
                 room_values = submitted
             except Exception:
                 _LOGGER.exception("Failed to validate room settings payload: %r", user_input)
@@ -236,8 +305,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Collect the custom temperature required by the selected window action."""
         errors: dict[str, str] = {}
-        room_values = self._pending_room or _normalize_room_options(
-            (_normalize_rooms(self._config_entry.options) or [_default_room_data()])[0]
+        room_values = self._pending_room or self._room_values_for_edit(
+            self._current_pending_rooms()
         )
         value = room_values.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
 
@@ -252,13 +321,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_range"
                 else:
                     submitted = {**room_values, CONF_WINDOW_CUSTOM_TEMPERATURE: value}
-                    return self.async_create_entry(
-                        title="",
-                        data={
-                            **(self._pending_options or {}),
-                            CONF_ROOMS: [submitted],
-                        },
-                    )
+                    self._store_pending_room(submitted)
+                    if not self._profile_management_active:
+                        return self._create_options_entry(self._current_pending_rooms())
+                    return await self.async_step_profiles()
             except ValueError:
                 errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_invalid"
             except Exception:
@@ -271,6 +337,80 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="window_custom_temperature",
             data_schema=_build_window_custom_temperature_schema(value),
+            errors=errors,
+        )
+
+    def _current_pending_rooms(self) -> list[dict[str, Any]]:
+        """Return the mutable pending regulation-profile list."""
+        if self._pending_rooms is None:
+            self._pending_rooms = _current_rooms(self._config_entry.options)
+        return self._pending_rooms
+
+    def _room_values_for_edit(self, rooms: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return form values for the profile currently being edited or added."""
+        if self._pending_room is not None:
+            return self._pending_room
+        if self._editing_room_index is not None and self._editing_room_index < len(rooms):
+            return _normalize_room_options(rooms[self._editing_room_index])
+        return _default_room_data()
+
+    def _store_pending_room(self, room: dict[str, Any]) -> None:
+        """Store the submitted profile in the pending profile list."""
+        rooms = self._current_pending_rooms()
+        if self._editing_room_index is None:
+            rooms.append(room)
+        else:
+            rooms[self._editing_room_index] = room
+        self._pending_room = None
+        self._editing_room_index = None
+
+    def _create_options_entry(
+        self,
+        rooms: list[dict[str, Any]],
+    ) -> config_entries.ConfigFlowResult:
+        """Persist pending options and regulation-profile list."""
+        return self.async_create_entry(
+            title="",
+            data={
+                **(self._pending_options or {}),
+                CONF_ROOMS: rooms,
+            },
+        )
+
+    async def _async_select_profile(
+        self,
+        user_input: dict[str, Any] | None,
+        *,
+        remove: bool,
+    ) -> config_entries.ConfigFlowResult:
+        errors: dict[str, str] = {}
+        rooms = self._current_pending_rooms()
+
+        if user_input is not None:
+            try:
+                raw_index = _unwrap_selector_value(user_input.get(CONF_PROFILE_INDEX))
+                if raw_index in (None, ""):
+                    errors[CONF_PROFILE_INDEX] = "profile_required"
+                else:
+                    index = int(raw_index)
+                    if index < 0 or index >= len(rooms):
+                        errors[CONF_PROFILE_INDEX] = "profile_required"
+                    elif remove:
+                        rooms.pop(index)
+                        self._pending_room = None
+                        self._editing_room_index = None
+                        return await self.async_step_profiles()
+                    else:
+                        self._editing_room_index = index
+                        self._pending_room = None
+                        return await self.async_step_room()
+            except Exception:
+                _LOGGER.exception("Failed to validate profile selection payload: %r", user_input)
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="profile_select_remove" if remove else "profile_select_edit",
+            data_schema=_build_profile_select_schema(rooms),
             errors=errors,
         )
 
@@ -430,6 +570,11 @@ def _normalize_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
     """Normalize stored regulation-profile list data."""
     raw_rooms = values.get(CONF_ROOMS) or []
     return [_normalize_room_options(room) for room in raw_rooms if isinstance(room, dict)]
+
+
+def _current_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return normalized stored regulation-profile data."""
+    return _normalize_rooms(values)
 
 
 def _normalize_time_field_value(raw_value: Any) -> str | None:
@@ -640,6 +785,73 @@ def _build_window_custom_temperature_schema(value: float | None) -> vol.Schema:
             ),
         }
     )
+
+
+def _build_profiles_schema(rooms: list[dict[str, Any]]) -> vol.Schema:
+    """Build the regulation-profile management schema."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_PROFILE_ACTION): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": PROFILE_ACTION_ADD, "label": "Add profile"},
+                        {"value": PROFILE_ACTION_EDIT, "label": "Edit profile"},
+                        {"value": PROFILE_ACTION_REMOVE, "label": "Remove profile"},
+                        {"value": PROFILE_ACTION_FINISH, "label": "Finish"},
+                    ],
+                    sort=False,
+                )
+            )
+        }
+    )
+
+
+def _build_profile_select_schema(rooms: list[dict[str, Any]]) -> vol.Schema:
+    """Build the profile selection schema for edit/remove actions."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_PROFILE_INDEX): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": str(index), "label": _profile_label(room)}
+                        for index, room in enumerate(rooms)
+                    ],
+                    sort=False,
+                )
+            )
+        }
+    )
+
+
+def _profile_label(room: dict[str, Any]) -> str:
+    """Return a compact label for one configured profile."""
+    entity_id = room.get(CONF_PRIMARY_CLIMATE_ENTITY_ID)
+    if isinstance(entity_id, str) and entity_id:
+        return entity_id
+    return "New regulation profile"
+
+
+def _has_duplicate_profile_anchor(
+    hass: Any,
+    rooms: list[dict[str, Any]],
+    primary_climate_entity_id: str,
+    area_id: str,
+    *,
+    exclude_index: int | None,
+) -> bool:
+    """Return whether a profile duplicates an existing primary climate or HA area."""
+    for index, room in enumerate(rooms):
+        if index == exclude_index:
+            continue
+        if room.get(CONF_PRIMARY_CLIMATE_ENTITY_ID) == primary_climate_entity_id:
+            return True
+        existing_primary_climate_entity_id = room.get(CONF_PRIMARY_CLIMATE_ENTITY_ID)
+        if not isinstance(existing_primary_climate_entity_id, str):
+            continue
+        existing_area_id = _resolve_area_reference(hass, existing_primary_climate_entity_id).area_id
+        if existing_area_id is not None and existing_area_id == area_id:
+            return True
+    return False
 
 
 def _build_room_schema(values: dict[str, Any]) -> vol.Schema:

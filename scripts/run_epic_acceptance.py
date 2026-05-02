@@ -21,6 +21,14 @@ EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
 EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.11"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
+EPIC_2_PRIMARY_CLIMATES = (
+    "climate.virtual_climate_office",
+    "climate.virtual_climate_living_room",
+)
+EPIC_2_WINDOW_ENTITIES = (
+    "binary_sensor.virtual_window_office",
+    "binary_sensor.virtual_window_living_room",
+)
 
 
 class AcceptanceError(RuntimeError):
@@ -131,23 +139,31 @@ def _set_entity_state(
 
 
 def _find_epic_2_room_entity(*, base_url: str, token: str) -> str:
+    room_entities = _find_epic_2_room_entities(base_url=base_url, token=token)
+    return room_entities["climate.virtual_climate_office"]
+
+
+def _find_epic_2_room_entities(*, base_url: str, token: str) -> dict[str, str]:
     states = _request_json(base_url=base_url, token=token, path="/api/states")
     if not isinstance(states, list):
         raise AcceptanceError("Expected /api/states to return a list.")
-    candidates = [
-        state
-        for state in states
-        if isinstance(state, dict)
-        and str(state.get("entity_id", "")).startswith("climate.")
-        and state.get("attributes", {}).get("primary_climate_entity_id")
-        == "climate.virtual_climate_office"
-    ]
-    if len(candidates) != 1:
-        raise AcceptanceError(
-            "Expected exactly one Epic 2 room climate entity for "
-            f"climate.virtual_climate_office, found {len(candidates)}."
-        )
-    return str(candidates[0]["entity_id"])
+    room_entities: dict[str, str] = {}
+    for primary_climate_entity_id in EPIC_2_PRIMARY_CLIMATES:
+        candidates = [
+            state
+            for state in states
+            if isinstance(state, dict)
+            and str(state.get("entity_id", "")).startswith("climate.")
+            and state.get("attributes", {}).get("primary_climate_entity_id")
+            == primary_climate_entity_id
+        ]
+        if len(candidates) != 1:
+            raise AcceptanceError(
+                "Expected exactly one Epic 2 room climate entity for "
+                f"{primary_climate_entity_id}, found {len(candidates)}."
+            )
+        room_entities[primary_climate_entity_id] = str(candidates[0]["entity_id"])
+    return room_entities
 
 
 def _wait_for_room_context(
@@ -175,6 +191,37 @@ def _wait_for_room_context(
                 f"{expected_context!r}; last payload={payload!r}."
             )
         time.sleep(0.5)
+
+
+def _call_area_override(
+    *,
+    base_url: str,
+    token: str,
+    area_id: str,
+    target_temperature: float,
+) -> None:
+    _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/services/climate_relay_core/set_area_override",
+        method="POST",
+        payload={
+            "area_id": area_id,
+            "target_temperature": target_temperature,
+            "termination_type": "duration",
+            "duration_minutes": 30,
+        },
+    )
+
+
+def _clear_area_override(*, base_url: str, token: str, area_id: str) -> None:
+    _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/services/climate_relay_core/clear_area_override",
+        method="POST",
+        payload={"area_id": area_id},
+    )
 
 
 def _find_config_entry_id(*, base_url: str, token: str, domain: str) -> str:
@@ -222,6 +269,16 @@ def _prepare_epic_1_profile(*, base_url: str, token: str) -> None:
         },
     )
     if flow.get("step_id") != "room":
+        if flow.get("step_id") != "profiles":
+            raise AcceptanceError(f"Expected profiles options step, got {flow!r}.")
+        flow = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/config/config_entries/options/flow/{flow_id}",
+            method="POST",
+            payload={"profile_action": "add"},
+        )
+    if flow.get("step_id") != "room":
         raise AcceptanceError(f"Expected room options step, got {flow!r}.")
     result = _request_json(
         base_url=base_url,
@@ -237,6 +294,14 @@ def _prepare_epic_1_profile(*, base_url: str, token: str) -> None:
             "schedule_home_end": "22:00:00",
         },
     )
+    if result.get("step_id") == "profiles":
+        result = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/config/config_entries/options/flow/{flow_id}",
+            method="POST",
+            payload={"profile_action": "finish"},
+        )
     if result.get("type") != "create_entry":
         raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
     time.sleep(5.0)
@@ -270,28 +335,104 @@ def _prepare_epic_2_profile(*, base_url: str, token: str) -> None:
             "verbose_logging": False,
         },
     )
-    if flow.get("step_id") != "room":
-        raise AcceptanceError(f"Expected room options step, got {flow!r}.")
+    if flow.get("step_id") != "profiles":
+        raise AcceptanceError(f"Expected profiles options step, got {flow!r}.")
+
+    _clear_profiles_in_flow(base_url=base_url, token=token, flow_id=flow_id)
+    _add_epic_2_profile(
+        base_url=base_url,
+        token=token,
+        flow_id=flow_id,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+        window_entity_id=EPIC_2_WINDOW_ENTITIES[0],
+        home_target_temperature=20.0,
+        away_target_temperature=17.0,
+    )
+    _add_epic_2_profile(
+        base_url=base_url,
+        token=token,
+        flow_id=flow_id,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[1],
+        window_entity_id=EPIC_2_WINDOW_ENTITIES[1],
+        home_target_temperature=19.0,
+        away_target_temperature=16.0,
+    )
     result = _request_json(
         base_url=base_url,
         token=token,
         path=f"/api/config/config_entries/options/flow/{flow_id}",
         method="POST",
-        payload={
-            "primary_climate_entity_id": "climate.virtual_climate_office",
-            "window_entity_id": "binary_sensor.virtual_window_office",
-            "window_action_type": "minimum_temperature",
-            "window_open_delay_seconds": 0,
-            "home_target_temperature": 20.0,
-            "away_target_type": "absolute",
-            "away_target_temperature": 17.0,
-            "schedule_home_start": "06:00:00",
-            "schedule_home_end": "22:00:00",
-        },
+        payload={"profile_action": "finish"},
     )
     if result.get("type") != "create_entry":
         raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
     time.sleep(5.0)
+
+
+def _add_epic_2_profile(
+    *,
+    base_url: str,
+    token: str,
+    flow_id: str,
+    primary_climate_entity_id: str,
+    window_entity_id: str,
+    home_target_temperature: float,
+    away_target_temperature: float,
+) -> None:
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={"profile_action": "add"},
+    )
+    if flow.get("step_id") != "room":
+        raise AcceptanceError(f"Expected room options step, got {flow!r}.")
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "primary_climate_entity_id": primary_climate_entity_id,
+            "window_entity_id": window_entity_id,
+            "window_action_type": "minimum_temperature",
+            "window_open_delay_seconds": 0,
+            "home_target_temperature": home_target_temperature,
+            "away_target_type": "absolute",
+            "away_target_temperature": away_target_temperature,
+            "schedule_home_start": "06:00:00",
+            "schedule_home_end": "22:00:00",
+        },
+    )
+    if flow.get("step_id") != "profiles":
+        raise AcceptanceError(f"Expected profiles step after adding profile, got {flow!r}.")
+
+
+def _clear_profiles_in_flow(*, base_url: str, token: str, flow_id: str) -> None:
+    """Remove existing profiles from an options flow for deterministic acceptance setup."""
+    for _attempt in range(8):
+        flow = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/config/config_entries/options/flow/{flow_id}",
+            method="POST",
+            payload={"profile_action": "remove"},
+        )
+        if flow.get("errors", {}).get("profile_action") == "profile_required":
+            return
+        if flow.get("step_id") != "profile_select_remove":
+            raise AcceptanceError(f"Expected profile removal selection step, got {flow!r}.")
+        flow = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/config/config_entries/options/flow/{flow_id}",
+            method="POST",
+            payload={"profile_index": "0"},
+        )
+        if flow.get("step_id") != "profiles":
+            raise AcceptanceError(f"Expected profiles step after removing profile, got {flow!r}.")
+    raise AcceptanceError("Could not clear existing regulation profiles for acceptance setup.")
 
 
 def _load_local_env_file() -> None:
@@ -374,7 +515,7 @@ async function openRegulationProfile() {{
   await page.goto(baseUrl + "/config/integrations/integration/climate_relay_core");
   await page.getByRole("button", {{ name: "Konfigurieren" }}).click();
   await page.getByRole("button", {{ name: "OK", exact: true }}).click();
-  await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+  await page.getByText("Regulation Profiles", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 }}
 
 async function clearPrimaryClimate() {{
@@ -400,8 +541,15 @@ async function selectPrimaryClimate(name) {{
   await dialog.getByText(name, {{ exact: true }}).click();
 }}
 
+async function chooseProfileAction(action) {{
+  const selector = page.locator("ha-selector-select").first();
+  await selector.locator("select").first().selectOption(action);
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+}}
+
 await ensureLoggedIn();
 await openRegulationProfile();
+await chooseProfileAction("add");
 await clearPrimaryClimate();
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Select exactly one primary climate entity.");
@@ -438,7 +586,7 @@ async function openRegulationProfile() {{
   await page.goto(baseUrl + "/config/integrations/integration/climate_relay_core");
   await page.getByRole("button", {{ name: "Konfigurieren" }}).click();
   await page.getByRole("button", {{ name: "OK", exact: true }}).click();
-  await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+  await page.getByText("Regulation Profiles", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 }}
 
 async function selectPrimaryClimate(name) {{
@@ -466,8 +614,15 @@ async function setTimeInput(selectorIndex, hours, minutes) {{
   }}, `${{hours}}:${{minutes}}:00`);
 }}
 
+async function chooseProfileAction(action) {{
+  const selector = page.locator("ha-selector-select").first();
+  await selector.locator("select").first().selectOption(action);
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+}}
+
 await ensureLoggedIn();
 await openRegulationProfile();
+await chooseProfileAction("add");
 await selectPrimaryClimate("Office");
 const timeSelectors = page.locator("ha-selector-time");
 await timeSelectors.nth(0).waitFor({{ timeout: 10000 }});
@@ -475,6 +630,8 @@ await timeSelectors.nth(1).waitFor({{ timeout: 10000 }});
 await setTimeInput(0, "06", "00");
 await setTimeInput(1, "22", "00");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await page.getByText("Regulation Profiles", {{ exact: true }}).waitFor({{ timeout: 10000 }});
+await chooseProfileAction("finish");
 await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{
   timeout: 10000,
   state: "detached",
@@ -805,8 +962,22 @@ async function submitAndStay() {{
   await page.getByText("Regulation Profile", {{ exact: true }}).waitFor({{ timeout: 10000 }});
 }}
 
+async function chooseProfileAction(action, label) {{
+  await selectNativeOption(0, action, label);
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+}}
+
+async function chooseProfileIndex(index) {{
+  await selectNativeOption(0, String(index), String(index));
+  await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+}}
+
 await ensureLoggedIn();
 await openRegulationProfile();
+await chooseProfileAction("remove", "Remove profile");
+await chooseProfileIndex(1);
+await expectText("Regulation Profiles");
+await chooseProfileAction("add", "Add profile");
 
 for (const text of [
   "Window contact",
@@ -826,14 +997,14 @@ await submitAndStay();
 await expectText("Assign the primary climate entity to a Home Assistant area first.");
 
 await clearEntitySelector(0);
-await selectEntity(0, "Primary climate entity", "Office");
+await selectEntity(0, "Primary climate entity", "Living Room");
 await setTimeInput(0, "06", "00");
 await setTimeInput(1, "06", "00");
 await submitAndStay();
 await expectText("Choose different start and end times for the daily home schedule.");
 
 await setTimeInput(1, "22", "00");
-await selectEntity(2, "Window contact", "Virtual Window Office");
+await selectEntity(2, "Window contact", "Virtual Window Living Room");
 await setNumberInput(0, "0");
 await setNumberInput(1, "20");
 await selectNativeOption(1, "absolute", "Absolute temperature");
@@ -846,6 +1017,38 @@ await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Set the custom temperature for the selected open-window action.");
 await setTextInput(0, "12");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Regulation Profiles");
+
+await chooseProfileAction("add", "Add profile");
+await selectEntity(0, "Primary climate entity", "Living Room");
+await setNumberInput(0, "0");
+await setNumberInput(1, "19");
+await selectNativeOption(1, "absolute", "Absolute temperature");
+await setNumberInput(2, "16");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Regulation Profiles");
+
+await chooseProfileAction("edit", "Edit profile");
+await chooseProfileIndex(1);
+await expectText("Regulation Profile");
+await setNumberInput(1, "18.5");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Regulation Profiles");
+
+await chooseProfileAction("remove", "Remove profile");
+await chooseProfileIndex(1);
+await expectText("Regulation Profiles");
+
+await chooseProfileAction("add", "Add profile");
+await selectEntity(0, "Primary climate entity", "Living Room");
+await setNumberInput(0, "0");
+await setNumberInput(1, "19");
+await selectNativeOption(1, "absolute", "Absolute temperature");
+await setNumberInput(2, "16");
+await page.getByRole("button", {{ name: "OK", exact: true }}).click();
+await expectText("Regulation Profiles");
+
+await chooseProfileAction("finish", "Finish");
 await expectText("Optionen wurden erfolgreich gespeichert.");
 await page.getByRole("button", {{ name: /Fertig|Done|Finish/ }}).click();
 await page.getByRole("button", {{ name: /Fertig|Done|Finish/ }}).waitFor({{
@@ -1036,13 +1239,21 @@ def _run_epic_2(
     for command, description in steps:
         _run_command(command, env=env, description=description)
 
-    _set_entity_state(
-        base_url=base_url,
-        token=token,
-        entity_id="binary_sensor.virtual_window_office",
-        state="off",
-        attributes={"device_class": "window", "friendly_name": "Virtual Window Office"},
-    )
+    window_friendly_names = {
+        "binary_sensor.virtual_window_office": "Virtual Window Office",
+        "binary_sensor.virtual_window_living_room": "Virtual Window Living Room",
+    }
+    for window_entity_id in EPIC_2_WINDOW_ENTITIES:
+        _set_entity_state(
+            base_url=base_url,
+            token=token,
+            entity_id=window_entity_id,
+            state="off",
+            attributes={
+                "device_class": "window",
+                "friendly_name": window_friendly_names[window_entity_id],
+            },
+        )
     print("[acceptance] Prepare Epic 2 window automation profile through API")
     _prepare_epic_2_profile(base_url=base_url, token=token)
     if not skip_gui:
@@ -1076,35 +1287,82 @@ def _run_epic_2(
                 check=False,
             )
 
-    room_entity_id = _find_epic_2_room_entity(base_url=base_url, token=token)
+    room_entities = _find_epic_2_room_entities(base_url=base_url, token=token)
+    office_room_entity_id = room_entities[EPIC_2_PRIMARY_CLIMATES[0]]
+    living_room_entity_id = room_entities[EPIC_2_PRIMARY_CLIMATES[1]]
+
+    print("[acceptance] Set area override for one configured profile only")
+    _call_area_override(
+        base_url=base_url,
+        token=token,
+        area_id=EPIC_2_PRIMARY_CLIMATES[0],
+        target_temperature=22.0,
+    )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=office_room_entity_id,
+        expected_context="manual_override",
+    )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=living_room_entity_id,
+        expected_context="schedule",
+    )
+
+    print("[acceptance] Clear area override for one configured profile only")
+    _clear_area_override(
+        base_url=base_url,
+        token=token,
+        area_id=EPIC_2_PRIMARY_CLIMATES[0],
+    )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=office_room_entity_id,
+        expected_context="schedule",
+    )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=living_room_entity_id,
+        expected_context="schedule",
+    )
 
     print("[acceptance] Open configured window contact and expect window override")
     _set_entity_state(
         base_url=base_url,
         token=token,
-        entity_id="binary_sensor.virtual_window_office",
+        entity_id=EPIC_2_WINDOW_ENTITIES[0],
         state="on",
         attributes={"device_class": "window", "friendly_name": "Virtual Window Office"},
     )
     _wait_for_room_context(
         base_url=base_url,
         token=token,
-        entity_id=room_entity_id,
+        entity_id=office_room_entity_id,
         expected_context="window_override",
+    )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=living_room_entity_id,
+        expected_context="schedule",
     )
 
     print("[acceptance] Close configured window contact and expect normal reevaluation")
     _set_entity_state(
         base_url=base_url,
         token=token,
-        entity_id="binary_sensor.virtual_window_office",
+        entity_id=EPIC_2_WINDOW_ENTITIES[0],
         state="off",
         attributes={"device_class": "window", "friendly_name": "Virtual Window Office"},
     )
     _wait_for_room_context(
         base_url=base_url,
         token=token,
-        entity_id=room_entity_id,
+        entity_id=office_room_entity_id,
         expected_context="schedule",
     )
 

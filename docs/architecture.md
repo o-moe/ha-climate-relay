@@ -78,7 +78,7 @@ model.
   `off` and `frost_protection` actions fall back to the primary climate
   minimum temperature.
 
-## Future multi-profile configuration
+## Multi-profile configuration
 
 Runtime data structures accept more than one regulation profile when
 configuration supplies them. Epic 2 / Increment 2.2 adds a bounded runtime
@@ -86,18 +86,15 @@ update baseline: profile-local events such as manual area overrides notify only
 the affected regulation profile, while global configuration and presence-mode
 changes still fan out to all profile entities.
 
-The user-facing config and options flows remain single-profile at this point.
-Full multi-profile add, edit, remove, and persistence UX is deferred until the
-dedicated multi-profile configuration slice because it requires complete
-Home Assistant GUI acceptance coverage for success, validation, cancellation,
-and persistence paths.
+The user-facing options flow supports adding, editing, removing, and finishing
+multiple primary-climate-anchored regulation profiles. Each profile still
+inherits its Home Assistant area from the selected primary climate entity. The
+flow rejects profiles whose primary climate entity has no HA area and rejects
+duplicate primary-climate or duplicate HA-area targeting.
 
-The future multi-profile model should add:
+Remaining multi-profile hardening should add:
 
 - stable generated profile IDs that survive display-name and entity changes
-- add, edit, and remove operations for regulation profiles
-- explicit area/profile target selection for services
-- validation for duplicate area targeting and orphaned profiles
 - migration rules for existing single-profile entries
 
 ## Frontend role

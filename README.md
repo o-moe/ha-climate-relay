@@ -72,7 +72,9 @@ integration. After setup, open the integration card menu in
 - fallback temperature
 - optional daily manual-override reset time
 - optional window contact, open-window action, custom window temperature, and
-  delay for the first regulation profile
+  delay per regulation profile
+- multiple primary-climate-anchored regulation profiles through add, edit, and
+  remove actions
 - simulation mode
 - verbose logging
 
@@ -92,9 +94,6 @@ After a successful installation and setup, Home Assistant currently exposes:
 - services named `climate_relay_core.set_global_mode`,
   `climate_relay_core.set_area_override`, and
   `climate_relay_core.clear_area_override`
-
-The current Home Assistant options dialog still edits one regulation profile.
-Full multi-profile add, edit, and remove UX is planned for a later Epic 2 slice.
 
 ## How To Use It
 

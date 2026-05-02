@@ -75,15 +75,18 @@ Epic 2 contributes the following executable evidence:
   entity creation, scoped `set_area_override` and `clear_area_override`
   notifications, and bounded reevaluation so unrelated area changes do not
   force all profile entities to apply targets.
+- `V-UT-001`, `V-IT-002`, `V-IT-003`, `V-AT-001`, `V-DR-002`: multi-profile
+  options-flow coverage in
+  `tests/components/climate_relay_core/test_config_flow.py` and
+  `scripts/run_epic_acceptance.py --epic 2`; evidence covers add, edit,
+  remove, finish, missing-profile validation, duplicate area validation, custom
+  window-temperature conditional validation, multiple configured HA climate
+  entities, scoped override service behavior, and unrelated-area window
+  reevaluation.
 - `V-DR-002`: Home Assistant options-flow UX structure documented in
   `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
   required selector values use dedicated follow-up steps with localized
   integration-owned validation errors.
-- Deferred Epic 2 evidence: full multi-profile Add/Edit/Remove options-flow
-  acceptance is not part of the Increment 2.2 runtime baseline because the
-  user-facing options flow remains intentionally single-profile. It must be
-  added with complete GUI success, error, cancel, and persistence coverage in
-  the future multi-profile configuration slice.
 
 ## Verification method legend
 

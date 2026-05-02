@@ -10,9 +10,17 @@ import voluptuous as vol
 from homeassistant.helpers import selector
 
 from custom_components.climate_relay_core.config_flow import (
+    CONF_PROFILE_ACTION,
+    CONF_PROFILE_INDEX,
+    PROFILE_ACTION_ADD,
+    PROFILE_ACTION_EDIT,
+    PROFILE_ACTION_FINISH,
+    PROFILE_ACTION_REMOVE,
     ClimateRelayCoreConfigFlow,
     ClimateRelayCoreOptionsFlow,
     _build_options_schema,
+    _build_profile_select_schema,
+    _build_profiles_schema,
     _build_reset_time_schema,
     _build_room_schema,
     _build_window_custom_temperature_schema,
@@ -175,7 +183,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         result = await flow.async_step_reset_time({CONF_MANUAL_OVERRIDE_RESET_TIME: "05:30"})
 
         self.assertEqual(result, expected_form_result)
-        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profiles")
 
         with patch(
             "custom_components.climate_relay_core.config_flow._resolve_area_reference",
@@ -245,7 +253,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result, {"type": "form"})
-        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profiles")
 
         with patch(
             "custom_components.climate_relay_core.config_flow._resolve_area_reference",
@@ -311,7 +319,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result, {"type": "form"})
-        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profiles")
 
         with patch(
             "custom_components.climate_relay_core.config_flow._resolve_area_reference",
@@ -579,7 +587,204 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             }
         )
 
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profiles")
+
+    async def test_profiles_step_adds_edits_removes_and_finishes_multiple_profiles(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+        await flow.async_step_init(
+            {
+                CONF_PERSON_ENTITY_IDS: ["person.alice"],
+                CONF_UNKNOWN_STATE_HANDLING: DEFAULT_UNKNOWN_STATE_HANDLING,
+                CONF_FALLBACK_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
+                CONF_MANUAL_OVERRIDE_RESET_ENABLED: False,
+                CONF_SIMULATION_MODE: False,
+                CONF_VERBOSE_LOGGING: False,
+            }
+        )
+
+        result = await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_ADD})
+        self.assertEqual(result, {"type": "form"})
         self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            return_value=SimpleNamespace(area_id="office", area_name="Office"),
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            )
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profiles")
+
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_ADD})
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            side_effect=[
+                SimpleNamespace(area_id="bedroom", area_name="Bedroom"),
+                SimpleNamespace(area_id="office", area_name="Office"),
+            ],
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.bedroom",
+                    CONF_HOME_TARGET_TEMPERATURE: 19.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 16.0,
+                }
+            )
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(len(flow._pending_rooms), 2)
+
+        result = await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_EDIT})
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "profile_select_edit")
+        result = await flow.async_step_profile_select_edit({CONF_PROFILE_INDEX: "1"})
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["step_id"], "room")
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            side_effect=[
+                SimpleNamespace(area_id="bedroom", area_name="Bedroom"),
+                SimpleNamespace(area_id="office", area_name="Office"),
+            ],
+        ):
+            result = await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.bedroom",
+                    CONF_HOME_TARGET_TEMPERATURE: 18.5,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 15.5,
+                }
+            )
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(flow._pending_rooms[1][CONF_HOME_TARGET_TEMPERATURE], 18.5)
+
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_REMOVE})
+        result = await flow.async_step_profile_select_remove({CONF_PROFILE_INDEX: "0"})
+        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(len(flow._pending_rooms), 1)
+
+        result = await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_FINISH})
+        self.assertEqual(result, {"type": "create_entry"})
+        data = flow.async_create_entry.call_args.kwargs["data"]
+        self.assertEqual(data[CONF_PERSON_ENTITY_IDS], ["person.alice"])
+        self.assertEqual(len(data[CONF_ROOMS]), 1)
+        self.assertEqual(data[CONF_ROOMS][0][CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.bedroom")
+
+    async def test_profiles_step_rejects_finish_edit_and_remove_without_profiles(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_FINISH})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_ACTION: "profile_required"},
+        )
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_EDIT})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_ACTION: "profile_required"},
+        )
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: PROFILE_ACTION_REMOVE})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_ACTION: "profile_required"},
+        )
+
+    async def test_profiles_step_rejects_invalid_action_payload(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {}
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: "unsupported"})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_ACTION: "profile_action_required"},
+        )
+
+        await flow.async_step_profiles({CONF_PROFILE_ACTION: {"value": 123}})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["errors"], {"base": "unknown"})
+
+    async def test_profile_select_step_rejects_invalid_selection(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.async_show_form = Mock(return_value={"type": "form"})
+
+        await flow.async_step_profile_select_edit({})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_INDEX: "profile_required"},
+        )
+
+        await flow.async_step_profile_select_edit({CONF_PROFILE_INDEX: "5"})
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PROFILE_INDEX: "profile_required"},
+        )
+
+        await flow.async_step_profile_select_remove({CONF_PROFILE_INDEX: "invalid"})
+        self.assertEqual(flow.async_show_form.call_args.kwargs["errors"], {"base": "unknown"})
+
+    async def test_room_step_rejects_duplicate_primary_climate_or_area(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        flow._profile_management_active = True
+
+        with patch(
+            "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+            side_effect=[
+                SimpleNamespace(area_id="office", area_name="Office"),
+                SimpleNamespace(area_id="office", area_name="Office"),
+            ],
+        ):
+            await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.bedroom",
+                    CONF_HOME_TARGET_TEMPERATURE: 19.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 16.0,
+                }
+            )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "profile_duplicate_area"},
+        )
 
     async def test_room_step_rejects_missing_primary_climate_entity(self) -> None:
         config_entry = Mock()
@@ -851,6 +1056,35 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         )
         self.assertFalse(any(key.schema == CONF_WINDOW_CUSTOM_TEMPERATURE for key in validators))
 
+    async def test_build_profile_management_schemas_use_expected_selectors(self) -> None:
+        profiles_schema = _build_profiles_schema([])
+        profile_action = profiles_schema.schema[
+            next(key for key in profiles_schema.schema if key.schema == CONF_PROFILE_ACTION)
+        ]
+        self.assertIsInstance(profile_action, selector.SelectSelector)
+
+        select_schema = _build_profile_select_schema(
+            [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                },
+                {
+                    CONF_HOME_TARGET_TEMPERATURE: 19.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 16.0,
+                },
+            ]
+        )
+        profile_index = select_schema.schema[
+            next(key for key in select_schema.schema if key.schema == CONF_PROFILE_INDEX)
+        ]
+        self.assertIsInstance(profile_index, selector.SelectSelector)
+        self.assertEqual(profile_index.config["options"][0]["label"], "climate.office")
+        self.assertEqual(profile_index.config["options"][1]["label"], "New regulation profile")
+
     async def test_build_room_schema_omits_none_defaults_for_optional_entity_selectors(
         self,
     ) -> None:
@@ -1023,6 +1257,7 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         }
         flow = ClimateRelayCoreOptionsFlow(config_entry)
         flow.hass = Mock()
+        flow._editing_room_index = 0
         flow.async_create_entry = Mock(return_value={"type": "create_entry"})
 
         with patch(
