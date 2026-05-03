@@ -146,6 +146,31 @@ This document defines the non-negotiable engineering expectations for this repos
 - The acceptance runner must fail loudly on browser automation errors
   and must not treat Playwright-reported `### Error` output as success.
 
+## Product UI boundary
+
+Home Assistant-native config and options flows shall be used for administrative
+setup and integration-global configuration.
+
+They shall not be used as the permanent primary interface for daily room-level
+climate control or room-level product configuration.
+
+When a behavior is part of normal room operation, the expected target surface is
+the custom frontend unless a documented Home Assistant constraint requires a
+temporary administrative fallback.
+
+Room-level options-flow configuration is allowed only as temporary bootstrap
+scaffolding until the custom frontend can create and update room configuration
+through backend-owned state and actions.
+
+Codex and contributors must not expand room-level options-flow UX without
+explicitly documenting:
+
+- why the change is temporary
+- which frontend interaction it maps to
+- which backend-owned state or action it uses
+- how the behavior will be migrated to the frontend room-management surface or
+  removed from the options flow
+
 ## Tooling baseline
 
 The Python toolchain for this repository is intentionally small:
