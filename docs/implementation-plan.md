@@ -9,7 +9,10 @@ This document derives a prioritized implementation plan from the reviewed SRS in
 [README.md](../README.md), [architecture.md](./architecture.md),
 [architecture.md](./architecture.md),
 [discovery.md](./discovery.md), [rules.md](./rules.md),
-[engineering-standards.md](./engineering-standards.md), and
+[engineering-standards.md](./engineering-standards.md),
+[product-ux-vision.md](./product-ux-vision.md),
+[frontend-interaction-model.md](./frontend-interaction-model.md),
+[frontend-backend-contract.md](./frontend-backend-contract.md), and
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 The plan is intentionally backend-first and uses the current implementation
@@ -17,9 +20,12 @@ state as the starting point.
 
 ## Plan status
 
-- Status: Approved implementation baseline
+- Status: Approved implementation baseline with Epic 2 UX correction
 - Approval date: 2026-04-20
-- Decision: proceed with implementation in the defined epic and increment order
+- UX correction date: 2026-05-03
+- Decision: proceed with implementation in the defined epic and increment order,
+  while preventing permanent room-level product UX from moving into the
+  integration-global options flow
 - Governance: every increment remains subject to the delivery contract in
   [engineering-standards.md](./engineering-standards.md)
 
@@ -36,6 +42,25 @@ The repository currently provides only a thin implementation baseline:
 This means the highest-value gaps are still the global configuration model, the
 area-bound regulation model, logging and diagnostics, the rule engine, override lifecycle,
 persistence, Home Assistant runtime surface, and frontend/backend integration.
+
+## UX correction decision
+
+As of Epic 2 / Increment 2.3, the project distinguishes administrative Home
+Assistant setup flows from the target room-level product UI.
+
+The integration options flow may temporarily host room-level configuration
+during backend bootstrap work, but this is not the target user experience. New
+room-level product behavior shall be specified against the frontend
+room-management UI and the frontend/backend contract.
+
+Before adding further room-level options-flow complexity, the project shall
+preserve the daily-use frontend interaction model and document how any temporary
+options-flow behavior will migrate to the frontend or be removed.
+
+The first frontend slice shall include room overview, room detail, room
+activation/configuration, schedule editing for the initially supported schedule
+model, quick manual override, clear override / resume schedule, global mode
+control, and basic degraded-state indication.
 
 ## Global delivery contract
 
@@ -100,10 +125,13 @@ The plan is prioritized by dependency and risk:
 2. Establish shared configuration and diagnostics foundations before features
    that depend on them.
 3. Implement deterministic rule evaluation before Home Assistant exposure.
-4. Implement persistence and degraded behavior before user-facing controls.
-5. Expose the smallest stable Home Assistant surface before richer frontend
+4. Define frontend interaction contracts before adding further room-level
+   options-flow complexity.
+5. Implement persistence and degraded behavior before broad release-capable
+   user-facing controls.
+6. Expose the smallest stable Home Assistant surface before richer frontend
    work.
-6. Keep frontend work strictly dependent on backend-owned state and actions.
+7. Keep frontend work strictly dependent on backend-owned state and actions.
 
 ## Epic 1: Foundation complete
 
@@ -195,9 +223,28 @@ resolver expected from the product.
 - Exit criteria: fallback and failure handling are product-owner testable as
   stable user-visible behavior.
 
-## Epic 3: Reliability and recovery
+## Epic 3: Reliability, recovery, and frontend contract correction
 
-Goal: make the backend reliable under restart and component failure.
+Goal: make the backend reliable under restart and component failure while
+preventing room-level product UX from becoming permanent options-flow UX.
+
+### Increment 3.0: Frontend contract and room-management UX skeleton
+
+- Scope: define the product UX vision, frontend interaction model, and
+  frontend/backend contract; introduce the first room-management UI skeleton
+  target before further room-level options-flow expansion.
+- User value: room-level climate behavior is no longer designed as
+  integration-global options-flow configuration.
+- Product-owner acceptance: room activation, room schedule editing, and quick
+  override are specified as frontend room-management flows, while the existing
+  options-flow room configuration is documented as temporary bootstrap
+  scaffolding.
+- Requirements: `FR-060` to `FR-062`, `FR-071`, `FR-077` to `FR-079`,
+  `FR-100`, `QR-050`, `QR-060`.
+- Verification focus: `V-DR-001`, `V-DR-002`, `V-DR-003`, `V-AT-004`.
+- Exit criteria: product UX docs, frontend interaction model,
+  frontend/backend contract, and verification criteria exist and are linked
+  from the implementation plan.
 
 ### Increment 3.1: Durable state persistence and startup recomputation
 
@@ -290,25 +337,31 @@ The recommended release path is:
 
 1. `M1 Foundation complete`: Epic 1
 2. `M2 Core automation complete`: Increment 2.1, 2.2, 2.3
-3. `M3 Reliable runtime`: Increment 3.1, 3.2
-4. `M4 Home Assistant usable baseline`: Increment 4.1, 4.2
-5. `M5 First coherent frontend`: Increment 5.1
-6. `M6 Frontend convenience`: Increment 5.2
+3. `M3 Frontend contract corrected`: Increment 3.0
+4. `M4 Reliable runtime`: Increment 3.1, 3.2
+5. `M5 Home Assistant usable baseline`: Increment 4.1, 4.2
+6. `M6 First coherent frontend`: Increment 5.1
+7. `M7 Frontend convenience`: Increment 5.2
 
-This sequencing keeps all user-visible surfaces downstream of a tested and
-restart-safe backend.
+This sequencing keeps all user-visible surfaces downstream of a tested backend
+while preventing room-level product UX from being permanently shaped by the
+integration-global options flow.
 
 ## Finalization decisions
 
 The plan is finalized with the following binding decisions:
 
 - Backend-first sequencing remains mandatory.
+- Backend-first does not mean options-flow-first for room-level product UX.
 - No frontend feature may become the owner of behavioral logic.
+- Room-level options-flow configuration is temporary bootstrap scaffolding and
+  shall be reduced or removed once frontend room management can write to the
+  backend-owned configuration model.
 - No increment may skip TDD, required verification artifacts, quality gates, or
   documentation updates.
-- The first release-capable implementation target is `M4 Home Assistant usable
+- The first release-capable implementation target is `M5 Home Assistant usable
   baseline`.
-- `M5` and `M6` remain downstream of the stable backend and Home Assistant
+- `M6` and `M7` remain downstream of the stable backend and Home Assistant
   runtime surface.
 
 ## Definition of done per increment
