@@ -317,6 +317,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     CONF_WINDOW_CUSTOM_TEMPERATURE,
                     DEFAULT_WINDOW_CUSTOM_TEMPERATURE if value is None else value,
                 )
+                if raw_value is None and value is None:
+                    raw_value = DEFAULT_WINDOW_CUSTOM_TEMPERATURE
                 value = _normalize_optional_float_selector(raw_value)
                 if value is None:
                     errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_required"
