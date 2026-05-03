@@ -39,6 +39,7 @@ from .const import (
     DEFAULT_SCHEDULE_HOME_START,
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DEFAULT_WINDOW_ACTION_TYPE,
+    DEFAULT_WINDOW_CUSTOM_TEMPERATURE,
     DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
     DOMAIN,
 )
@@ -778,7 +779,7 @@ def _build_window_custom_temperature_schema(value: float | None) -> vol.Schema:
         {
             vol.Required(
                 CONF_WINDOW_CUSTOM_TEMPERATURE,
-                default="" if value is None else value,
+                default=DEFAULT_WINDOW_CUSTOM_TEMPERATURE if value is None else value,
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=5,

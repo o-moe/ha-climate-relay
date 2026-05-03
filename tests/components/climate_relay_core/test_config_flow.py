@@ -60,6 +60,7 @@ from custom_components.climate_relay_core.const import (
     DEFAULT_NAME,
     DEFAULT_UNKNOWN_STATE_HANDLING,
     DEFAULT_WINDOW_ACTION_TYPE,
+    DEFAULT_WINDOW_CUSTOM_TEMPERATURE,
     DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
     DOMAIN,
 )
@@ -1016,6 +1017,15 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             selector.NumberSelectorMode.BOX,
         )
         self.assertEqual(custom_temperature.config["unit_of_measurement"], "°C")
+
+    async def test_build_window_custom_temperature_schema_uses_numeric_default(self) -> None:
+        schema = _build_window_custom_temperature_schema(None)
+        defaults = {key.schema: key.default() for key in schema.schema}
+
+        self.assertEqual(
+            defaults[CONF_WINDOW_CUSTOM_TEMPERATURE],
+            DEFAULT_WINDOW_CUSTOM_TEMPERATURE,
+        )
 
     async def test_build_room_schema_uses_expected_selectors(self) -> None:
         schema = _build_room_schema(
