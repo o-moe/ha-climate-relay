@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.24"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.25"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 EPIC_2_PRIMARY_CLIMATES = (
@@ -1033,7 +1033,6 @@ await setNumberInput(2, "17");
 await selectNativeOption(0, "custom_temperature", "Use custom temperature");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Open-window Action: Custom Temperature");
-await setNumberInput(0, "12");
 await clickDialogOk();
 await expectText("Regulation Profiles");
 
