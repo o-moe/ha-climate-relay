@@ -557,7 +557,7 @@ Examples:
   clear, composable, and easier to reason about than special bulk semantics.
 - Fit criterion: The backend interface supports manual override operations per
   area rather than requiring dedicated multi-area domain commands.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for the Epic 2 multi-area runtime baseline
 
 #### FR-073 Minimal runtime command set
 
@@ -1375,7 +1375,7 @@ Examples:
 - Source: Requirements engineering refinement on 2026-04-20
 - Fit criterion: Architecture and tests show that an event affecting one area
   reevaluates only that area and any explicitly dependent global logic.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for the Epic 2 multi-area runtime baseline
 
 ### 10.4 Reliability and recoverability
 

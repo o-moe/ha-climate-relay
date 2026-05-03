@@ -121,6 +121,7 @@ class GlobalRuntime:
         self._global_mode = GlobalMode.AUTO
         self._manual_overrides: dict[str, ManualOverride] = {}
         self._subscribers: set[Callable[[], None]] = set()
+        self._profile_subscribers: dict[str, set[Callable[[], None]]] = {}
 
     @property
     def config(self) -> GlobalConfig:
@@ -210,7 +211,7 @@ class GlobalRuntime:
             override.termination_type,
             override.ends_at.isoformat() if override.ends_at is not None else "never",
         )
-        self._notify_subscribers()
+        self._notify_profile_subscribers(room_config.profile_id)
         return override
 
     async def async_clear_area_override(self, *, area_id: str, source: str) -> None:
@@ -219,7 +220,7 @@ class GlobalRuntime:
         removed = self._manual_overrides.pop(room_config.profile_id, None)
         if removed is not None:
             _LOGGER.info("Manual override for %s cleared via %s", room_config.display_name, source)
-            self._notify_subscribers()
+            self._notify_profile_subscribers(room_config.profile_id)
 
     @callback
     def manual_override_for_profile(self, profile_id: str) -> ManualOverride | None:
@@ -284,8 +285,33 @@ class GlobalRuntime:
         return unsubscribe
 
     @callback
+    def subscribe_for_profile(
+        self,
+        profile_id: str,
+        subscriber: Callable[[], None],
+    ) -> Callable[[], None]:
+        """Register a subscriber for one regulation profile's bounded updates."""
+        subscribers = self._profile_subscribers.setdefault(profile_id, set())
+        subscribers.add(subscriber)
+
+        @callback
+        def unsubscribe() -> None:
+            subscribers.discard(subscriber)
+            if not subscribers:
+                self._profile_subscribers.pop(profile_id, None)
+
+        return unsubscribe
+
+    @callback
     def _notify_subscribers(self) -> None:
-        for subscriber in self._subscribers:
+        for subscriber in tuple(self._subscribers):
+            subscriber()
+        for profile_id in tuple(self._profile_subscribers):
+            self._notify_profile_subscribers(profile_id)
+
+    @callback
+    def _notify_profile_subscribers(self, profile_id: str) -> None:
+        for subscriber in tuple(self._profile_subscribers.get(profile_id, ())):
             subscriber()
 
     def _find_room_config(self, area_id: str) -> RegulationProfileConfig:

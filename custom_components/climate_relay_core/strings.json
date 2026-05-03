@@ -46,7 +46,7 @@
       },
       "room": {
         "title": "Regulation Profile",
-        "description": "Configure the first primary-climate-anchored control surface for Climate Relay.",
+        "description": "Configure one primary-climate-anchored control surface for Climate Relay.",
         "data": {
           "primary_climate_entity_id": "Primary climate entity",
           "humidity_entity_id": "Humidity sensor",
@@ -72,6 +72,27 @@
           "schedule_home_end": "Daily local time when the profile returns to the away target."
         }
       },
+      "profiles": {
+        "title": "Regulation Profiles",
+        "description": "Add, edit, or remove primary-climate-anchored regulation profiles. Each profile inherits its Home Assistant area from the selected primary climate entity.",
+        "data": {
+          "profile_action": "Profile action"
+        }
+      },
+      "profile_select_edit": {
+        "title": "Edit Regulation Profile",
+        "description": "Choose the regulation profile to edit. Closing this step cancels the current Regulation Profiles changes.",
+        "data": {
+          "profile_index": "Regulation profile"
+        }
+      },
+      "profile_select_remove": {
+        "title": "Remove Regulation Profile",
+        "description": "Choose the regulation profile to remove. The removal is saved only after you finish the Regulation Profiles flow.",
+        "data": {
+          "profile_index": "Regulation profile"
+        }
+      },
       "window_custom_temperature": {
         "title": "Open-window Action: Custom Temperature",
         "description": "Set the custom temperature required because Open-window action is set to Use custom temperature. The other Regulation Profile changes are still pending. Closing this step cancels the current Regulation Profile changes.",
@@ -88,6 +109,9 @@
       "reset_time_required": "This field is required when the daily override reset is enabled.",
       "primary_climate_required": "Select exactly one primary climate entity.",
       "primary_climate_area_required": "Assign the primary climate entity to a Home Assistant area first.",
+      "profile_action_required": "Choose a profile action.",
+      "profile_required": "Add or select a regulation profile first.",
+      "profile_duplicate_area": "Choose a primary climate entity in an area that is not already configured.",
       "schedule_window_required": "Choose different start and end times for the daily home schedule.",
       "window_custom_temperature_required": "Set the custom temperature for the selected open-window action.",
       "window_custom_temperature_invalid": "Enter a valid custom temperature.",
@@ -113,6 +137,14 @@
         "frost_protection": "Use frost protection if supported",
         "minimum_temperature": "Use minimum temperature",
         "custom_temperature": "Use custom temperature"
+      }
+    },
+    "profile_action": {
+      "options": {
+        "add": "Add profile",
+        "edit": "Edit profile",
+        "remove": "Remove profile",
+        "finish": "Finish"
       }
     }
   },
