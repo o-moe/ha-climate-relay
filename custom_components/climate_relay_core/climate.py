@@ -6,7 +6,7 @@ import logging
 from datetime import timedelta
 from typing import Final
 
-from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_MIN_TEMP,
     ATTR_PRESET_MODES,
@@ -80,6 +80,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
+    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
     def __init__(
         self,
