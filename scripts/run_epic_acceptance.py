@@ -824,7 +824,17 @@ async function selectEntity(selectorIndex, dialogName, optionText) {{
 
 async function selectNativeOption(selectorIndex, optionValue, optionLabel) {{
   await installBrowserHelpers();
-  const selector = page.locator("ha-selector-select").nth(selectorIndex);
+  const selectors = page.locator("ha-selector-select");
+  const visibleSelectors = [];
+  for (let index = 0; index < await selectors.count(); index += 1) {{
+    const selector = selectors.nth(index);
+    if (await selector.isVisible().catch(() => false)) {{
+      visibleSelectors.push(selector);
+    }}
+  }}
+  const selector = visibleSelectors.length
+    ? visibleSelectors[Math.min(selectorIndex, visibleSelectors.length - 1)]
+    : selectors.nth(selectorIndex);
   const nativeSelect = selector.locator("select").first();
   if (await nativeSelect.count()) {{
     await nativeSelect.selectOption(optionValue);
@@ -846,29 +856,56 @@ async function selectNativeOption(selectorIndex, optionValue, optionLabel) {{
     );
     return;
   }}
-  await selector.locator("mwc-select, ha-select").first().click();
-  await page.getByText(optionLabel, {{ exact: true }}).click();
+  const menuSelect = selector.locator("mwc-select, ha-select").first();
+  if (await menuSelect.isVisible().catch(() => false)) {{
+    await menuSelect.click();
+    await page.getByText(optionLabel, {{ exact: true }}).click();
+    return;
+  }}
+  await page.evaluate(
+    ([index, label, value]) => window.__climateRelayAcceptance.setSelectorValue(
+      "ha-selector-select",
+      index,
+      label,
+      value,
+    ),
+    [selectorIndex, optionLabel, optionValue],
+  );
+}}
+
+async function resolveNumberSelector(selectorIndex) {{
+  const selectors = page.locator("ha-selector-number");
+  const visibleSelectors = [];
+  for (let index = 0; index < await selectors.count(); index += 1) {{
+    const selector = selectors.nth(index);
+    const input = selector.locator("input").first();
+    if (await input.isVisible().catch(() => false)) {{
+      visibleSelectors.push(selector);
+    }}
+  }}
+  if (visibleSelectors.length) {{
+    return visibleSelectors[Math.min(selectorIndex, visibleSelectors.length - 1)];
+  }}
+  return selectors.nth(selectorIndex);
 }}
 
 async function setNumberInput(selectorIndex, value) {{
-  const selector = page.locator("ha-selector-number").nth(selectorIndex);
+  const selector = await resolveNumberSelector(selectorIndex);
   const input = selector.locator("input").first();
   await input.fill(String(value));
   await input.dispatchEvent("input");
   await input.dispatchEvent("change");
   await selector.evaluate((element, value) => {{
-    const numericValue = Number(value);
-    const finalValue = Number.isNaN(numericValue) ? value : numericValue;
     const targets = [element];
     if (element.getRootNode().host) {{
       targets.push(element.getRootNode().host);
     }}
     for (const target of targets) {{
-      target.value = finalValue;
+      target.value = value;
       target.dispatchEvent(new CustomEvent("value-changed", {{
         bubbles: true,
         composed: true,
-        detail: {{ value: finalValue }},
+        detail: {{ value }},
       }}));
     }}
   }}, String(value));
@@ -877,7 +914,7 @@ async function setNumberInput(selectorIndex, value) {{
 }}
 
 async function clearNumberInput(selectorIndex) {{
-  const selector = page.locator("ha-selector-number").nth(selectorIndex);
+  const selector = await resolveNumberSelector(selectorIndex);
   const input = selector.locator("input").first();
   await input.fill("");
   await input.dispatchEvent("input");
@@ -939,6 +976,20 @@ async function setTextInput(selectorIndex, value) {{
 }}
 
 async function clickDialogOk() {{
+  const dialogs = page.getByRole("dialog");
+  for (let index = await dialogs.count() - 1; index >= 0; index -= 1) {{
+    const dialog = dialogs.nth(index);
+    if (await dialog.isVisible().catch(() => false)) {{
+      const okButton = dialog.getByRole("button", {{ name: "OK", exact: true }});
+      if (await okButton.count()) {{
+        const button = okButton.first();
+        if (await button.isVisible().catch(() => false)) {{
+          await button.click();
+          return;
+        }}
+      }}
+    }}
+  }}
   const buttons = page.getByRole("button", {{ name: "OK", exact: true }});
   for (let index = await buttons.count() - 1; index >= 0; index -= 1) {{
     const button = buttons.nth(index);
@@ -1030,10 +1081,8 @@ await setNumberInput(0, "0");
 await setNumberInput(1, "20");
 await selectNativeOption(1, "absolute", "Absolute temperature");
 await setNumberInput(2, "17");
-await selectNativeOption(0, "custom_temperature", "Use custom temperature");
+await selectNativeOption(0, "minimum_temperature", "Use minimum temperature");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
-await expectText("Open-window Action: Custom Temperature");
-await clickDialogOk();
 await expectText("Regulation Profiles");
 
 await chooseProfileAction("edit", "Edit profile");

@@ -66,8 +66,8 @@ Epic 2 contributes the following executable evidence:
   options-flow GUI regression with deterministic baseline preparation and API
   open/close acceptance path prepared in
   `scripts/run_epic_acceptance.py --epic 2`; release acceptance passed on
-  2026-05-02 against `v0.2.0-alpha.11` on
-  `http://haos-test.local:8123`
+  2026-05-02 against `v0.2.0-alpha.11` and reran successfully on 2026-05-03
+  against `v0.2.0-alpha.28` on `http://haos-test.local:8123`
 - `V-UT-004`, `V-IT-002`, `V-IT-003`, `V-DR-001`: Epic 2 multi-area runtime
   baseline coverage in `tests/components/climate_relay_core/test_runtime.py`
   and `tests/components/climate_relay_core/test_climate.py`; evidence covers
@@ -79,10 +79,11 @@ Epic 2 contributes the following executable evidence:
   options-flow coverage in
   `tests/components/climate_relay_core/test_config_flow.py` and
   `scripts/run_epic_acceptance.py --epic 2`; evidence covers add, edit,
-  remove, finish, missing-profile validation, duplicate area validation, custom
-  window-temperature conditional validation, multiple configured HA climate
-  entities, scoped override service behavior, and unrelated-area window
-  reevaluation.
+  remove, finish, missing-profile validation, duplicate area validation,
+  custom window-temperature conditional backend validation, multiple configured
+  HA climate entities, scoped override service behavior, and unrelated-area
+  window reevaluation. HA GUI acceptance passed on 2026-05-03 against
+  `v0.2.0-alpha.28`.
 - `V-DR-002`: Home Assistant options-flow UX structure documented in
   `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
   required selector values use dedicated follow-up steps with localized
