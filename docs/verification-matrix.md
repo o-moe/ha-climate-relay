@@ -88,6 +88,16 @@ Epic 2 contributes the following executable evidence:
   `docs/architecture.md` and `docs/engineering-standards.md`; conditionally
   required selector values use dedicated follow-up steps with localized
   integration-owned validation errors.
+- `V-UT-007`, `V-IT-005`, `V-AT-005`, `V-DR-003`: Epic 2 fallback completion
+  coverage in `tests/components/climate_relay_core/test_rules.py`,
+  `tests/components/climate_relay_core/test_climate.py`, and the extended
+  `scripts/run_epic_acceptance.py --epic 2` runner; local automated tests cover
+  required primary-climate missing, `unknown`, and `unavailable` fallback,
+  fallback priority over manual/window contexts, exceptional fallback to the
+  last valid target or 20 C, and user-visible
+  `required_component_fallback`. Release acceptance for the new runner path is
+  pending the next Epic 2 alpha build because the dedicated HA instance
+  currently runs `v0.2.0-alpha.28`.
 
 ## Verification method legend
 

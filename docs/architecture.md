@@ -78,6 +78,23 @@ model.
   `off` and `frost_protection` actions fall back to the primary climate
   minimum temperature.
 
+## Epic 2 fallback decisions
+
+- Required primary-climate availability is a resolver input, not a Home
+  Assistant entity concern. The Home Assistant climate entity only adapts
+  `missing`, `unknown`, and `unavailable` source states into that domain input.
+- Required-component fallback has higher priority than window, manual, and
+  schedule contexts because unavailable required control components make normal
+  targets non-actionable. The resolved target is the configured global fallback
+  temperature and the area entity exposes `active_control_context = fallback`
+  plus `degradation_status = required_component_fallback`.
+- Exceptional fallback for invalid runtime target data remains pure domain
+  behavior. It reuses the last valid temperature target confirmed by the
+  adapter when available and otherwise falls back to 20 C.
+- Optional sensor degradation remains explanatory only. Unavailable optional
+  humidity or window sources expose `optional_sensor_unavailable` without
+  changing the effective target by themselves.
+
 ## Multi-profile configuration
 
 Runtime data structures accept more than one regulation profile when

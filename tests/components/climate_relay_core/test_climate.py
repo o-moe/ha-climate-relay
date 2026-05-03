@@ -483,6 +483,67 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             "required_component_fallback",
         )
 
+    async def test_entity_uses_fallback_when_primary_climate_is_unavailable(self) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(
+                state="unavailable",
+                attributes={"temperature": 19.0, "hvac_modes": ["off", "heat"]},
+            ),
+        )
+
+        self.assertEqual(entity.hvac_mode, HVACMode.HEAT)
+        self.assertEqual(entity.target_temperature, 16.5)
+        self.assertIsNone(entity.current_temperature)
+        self.assertEqual(entity.hvac_modes, [HVACMode.HEAT])
+        self.assertEqual(entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT], "fallback")
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_DEGRADATION_STATUS],
+            "required_component_fallback",
+        )
+
+    async def test_required_component_fallback_suppresses_unavailable_primary_write(
+        self,
+    ) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(
+                state="unknown",
+                attributes={"temperature": 19.0, "hvac_modes": ["off", "heat"]},
+            ),
+        )
+
+        with self.assertLogs(climate_platform._LOGGER.name, level="WARNING") as logs:
+            await entity._async_apply_effective_target(source="test")
+
+        entity.hass.services.async_call.assert_not_awaited()
+        self.assertIn("Required climate component unavailable", logs.output[0])
+
+    async def test_required_component_fallback_precedes_active_window_override(
+        self,
+    ) -> None:
+        entity = self._build_entity(
+            primary_state=SimpleNamespace(
+                state="unavailable",
+                attributes={"temperature": 19.0, "min_temp": 6.0},
+            ),
+            window_state=SimpleNamespace(state="on", attributes={}),
+            window_open_delay_seconds=0,
+        )
+        entity.async_write_ha_state = Mock()
+
+        entity._handle_source_state_change(
+            SimpleNamespace(
+                data={
+                    "entity_id": "binary_sensor.living_room_window",
+                    "new_state": SimpleNamespace(state="on", attributes={}),
+                }
+            )
+        )
+        await asyncio.sleep(0)
+
+        self.assertEqual(entity.target_temperature, 16.5)
+        self.assertEqual(entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT], "fallback")
+        entity.hass.services.async_call.assert_not_awaited()
+
     async def test_entity_falls_back_for_unknown_hvac_mode_and_invalid_hvac_modes(self) -> None:
         entity = self._build_entity(
             primary_state=SimpleNamespace(
