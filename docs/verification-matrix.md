@@ -95,9 +95,10 @@ Epic 2 contributes the following executable evidence:
   required primary-climate missing, `unknown`, and `unavailable` fallback,
   fallback priority over manual/window contexts, exceptional fallback to the
   last valid target or 20 C, and user-visible
-  `required_component_fallback`. Release acceptance for the new runner path is
-  pending the next Epic 2 alpha build because the dedicated HA instance
-  currently runs `v0.2.0-alpha.28`.
+  `required_component_fallback`. Full Epic 2 acceptance, including the existing
+  GUI regression and the new required-primary fallback runtime path, passed on
+  2026-05-03 against `v0.2.0-alpha.30` on
+  `http://haos-test.local:8123`.
 
 ## Verification method legend
 
