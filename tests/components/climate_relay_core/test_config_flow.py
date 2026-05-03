@@ -1365,10 +1365,13 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(flow._pending_room[CONF_WINDOW_ACTION_TYPE], "custom_temperature")
 
-    async def test_custom_temperature_step_requires_value(self) -> None:
+    async def test_custom_temperature_step_uses_default_for_empty_payload_value(
+        self,
+    ) -> None:
         config_entry = Mock()
         config_entry.options = {}
         flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow._pending_options = {CONF_PERSON_ENTITY_IDS: ["person.alice"]}
         flow._pending_room = {
             CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
             CONF_WINDOW_ACTION_TYPE: "custom_temperature",
@@ -1380,16 +1383,17 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             CONF_SCHEDULE_HOME_START: "06:00:00",
             CONF_SCHEDULE_HOME_END: "22:00:00",
         }
-        flow.async_show_form = Mock(return_value={"type": "form"})
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
 
         result = await flow.async_step_window_custom_temperature(
             {CONF_WINDOW_CUSTOM_TEMPERATURE: ""}
         )
 
-        self.assertEqual(result, {"type": "form"})
+        self.assertEqual(result, {"type": "create_entry"})
+        created_data = flow.async_create_entry.call_args.kwargs["data"]
         self.assertEqual(
-            flow.async_show_form.call_args.kwargs["errors"][CONF_WINDOW_CUSTOM_TEMPERATURE],
-            "window_custom_temperature_required",
+            created_data[CONF_ROOMS][0][CONF_WINDOW_CUSTOM_TEMPERATURE],
+            DEFAULT_WINDOW_CUSTOM_TEMPERATURE,
         )
 
     async def test_custom_temperature_step_rejects_out_of_range_value(self) -> None:
