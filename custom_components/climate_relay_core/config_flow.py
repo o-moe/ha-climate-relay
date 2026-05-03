@@ -313,9 +313,11 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
-                value = _normalize_optional_float_selector(
-                    user_input.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
+                raw_value = user_input.get(
+                    CONF_WINDOW_CUSTOM_TEMPERATURE,
+                    DEFAULT_WINDOW_CUSTOM_TEMPERATURE if value is None else value,
                 )
+                value = _normalize_optional_float_selector(raw_value)
                 if value is None:
                     errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_required"
                 elif not 5 <= value <= 35:
