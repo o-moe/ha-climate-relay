@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
-from . import room_config
+from . import room_config, room_management
 from .const import (
     CONF_AWAY_TARGET_TEMPERATURE,
     CONF_AWAY_TARGET_TYPE,
@@ -367,9 +367,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
         """Store the submitted profile in the pending profile list."""
         rooms = self._current_pending_rooms()
         if self._editing_room_index is None:
-            rooms.append(room)
+            self._pending_rooms = room_management.activate_room(rooms, room)
         else:
-            rooms[self._editing_room_index] = room
+            room_ref = rooms[self._editing_room_index][CONF_PRIMARY_CLIMATE_ENTITY_ID]
+            self._pending_rooms = room_management.update_room(rooms, room_ref, room)
         self._pending_room = None
         self._editing_room_index = None
 
@@ -405,7 +406,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     if index < 0 or index >= len(rooms):
                         errors[CONF_PROFILE_INDEX] = "profile_required"
                     elif remove:
-                        rooms.pop(index)
+                        self._pending_rooms = room_management.disable_room(
+                            rooms,
+                            rooms[index][CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                        )
                         self._pending_room = None
                         self._editing_room_index = None
                         return await self.async_step_profiles()
