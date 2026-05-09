@@ -17,6 +17,13 @@ This document is intentionally a contract and gap analysis. It does not introduc
 a frontend, a new Options Flow surface, config subentries, or a new persistence
 format.
 
+The next implementation step must not introduce new Home Assistant services,
+WebSocket APIs, config subentries, or frontend APIs. It is limited to a
+behavior-neutral extraction of reusable room/profile validation and
+normalization from `custom_components/climate_relay_core/config_flow.py`. A
+later frontend-facing state provider or API should only be introduced after the
+concrete frontend consumption model has been explicitly chosen.
+
 This spike refines the target direction already documented in
 [product-ux-vision.md](./product-ux-vision.md),
 [frontend-interaction-model.md](./frontend-interaction-model.md),
@@ -525,6 +532,23 @@ Required room state:
 - Window custom temperature follow-up validation.
 - Most room configuration normalization from selector-shaped payloads.
 
+### Layer boundaries for extraction
+
+Domain/application-owned logic includes room/profile value normalization,
+room/profile invariant validation, schedule validation, and target/window
+configuration validation.
+
+Home Assistant adapter logic includes selector payload handling, entity registry
+lookup, area/device registry lookup, Options Flow form schema construction, and
+strings/localization keys.
+
+Runtime logic includes active room configs, overrides, schedule evaluation,
+target resolution, and subscriber notification.
+
+Reusable validation modules should keep Home Assistant-specific Options Flow and
+registry details out of backend-owned validation. Adapter-specific helpers may
+exist when needed, but they should be named and scoped as adapter helpers.
+
 ### Partially implemented
 
 - Stable room/profile identity: runtime has `profile_id`, but it is derived from
@@ -595,9 +619,10 @@ Required room state:
 
 ## 6. Proposed implementation sequence
 
-1. Extract reusable room/profile validation out of
+1. Extract reusable room/profile normalization and pure validation out of
    `custom_components/climate_relay_core/config_flow.py` without changing
-   behavior.
+   behavior. Do not add services, WebSocket APIs, config subentries, frontend
+   APIs, or a new persistence shape in this step.
 2. Introduce backend-owned room configuration service/application functions that
    update the existing `rooms` options format.
 3. Add stable room/profile identifiers if missing, including migration tests for
@@ -658,6 +683,9 @@ contract:
 
 ## 9. Recommended next Codex task
 
-Extract room/profile validation and normalization from
+Extract reusable room/profile normalization and pure validation from
 `custom_components/climate_relay_core/config_flow.py` into a backend-owned module
-without changing behavior.
+without changing behavior. Keep Options-Flow-specific selector unwrapping,
+schema construction, localized error mapping, and Home Assistant registry lookup
+in the adapter layer unless a helper is explicitly designed as an adapter
+helper.

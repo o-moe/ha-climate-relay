@@ -1,0 +1,107 @@
+"""Room configuration normalization tests."""
+
+from __future__ import annotations
+
+from unittest import TestCase
+
+from custom_components.climate_relay_core.const import (
+    CONF_AWAY_TARGET_TEMPERATURE,
+    CONF_AWAY_TARGET_TYPE,
+    CONF_HOME_TARGET_TEMPERATURE,
+    CONF_PRIMARY_CLIMATE_ENTITY_ID,
+    CONF_ROOMS,
+    CONF_SCHEDULE,
+    CONF_SCHEDULE_HOME_END,
+    CONF_SCHEDULE_HOME_START,
+    CONF_WINDOW_ACTION_TYPE,
+    CONF_WINDOW_OPEN_DELAY_SECONDS,
+    DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+)
+from custom_components.climate_relay_core.room_config import (
+    normalize_non_negative_int,
+    normalize_optional_float,
+    normalize_room_options,
+    normalize_rooms,
+    validate_room_schedule_window,
+)
+
+
+class RoomConfigTest(TestCase):
+    """Test room/profile configuration helpers."""
+
+    def test_normalize_room_options_keeps_existing_persisted_shape(self) -> None:
+        normalized = normalize_room_options(
+            {
+                CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.living_room",
+                CONF_HOME_TARGET_TEMPERATURE: "21.5",
+                CONF_AWAY_TARGET_TYPE: "absolute",
+                CONF_AWAY_TARGET_TEMPERATURE: "18.0",
+                CONF_WINDOW_ACTION_TYPE: "off",
+                CONF_WINDOW_OPEN_DELAY_SECONDS: "30",
+                CONF_SCHEDULE_HOME_START: "07:00:00",
+                CONF_SCHEDULE_HOME_END: "22:00:00",
+            }
+        )
+
+        self.assertEqual(normalized[CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.living_room")
+        self.assertEqual(normalized[CONF_HOME_TARGET_TEMPERATURE], 21.5)
+        self.assertEqual(normalized[CONF_AWAY_TARGET_TEMPERATURE], 18.0)
+        self.assertEqual(normalized[CONF_WINDOW_OPEN_DELAY_SECONDS], 30)
+        self.assertEqual(normalized[CONF_SCHEDULE_HOME_START], "07:00:00")
+        self.assertEqual(normalized[CONF_SCHEDULE_HOME_END], "22:00:00")
+
+    def test_normalize_rooms_filters_non_dict_entries(self) -> None:
+        normalized = normalize_rooms(
+            {
+                CONF_ROOMS: [
+                    {
+                        CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                        CONF_HOME_TARGET_TEMPERATURE: 21.0,
+                    },
+                    "invalid",
+                ]
+            }
+        )
+
+        self.assertEqual(len(normalized), 1)
+        self.assertEqual(normalized[0][CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.office")
+
+    def test_normalize_room_options_rejects_invalid_away_target_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported away target type"):
+            normalize_room_options({CONF_AWAY_TARGET_TYPE: "unsupported"})
+
+    def test_normalize_room_options_rejects_invalid_window_action_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported window action type"):
+            normalize_room_options({CONF_WINDOW_ACTION_TYPE: "unsupported"})
+
+    def test_optional_float_accepts_strings_with_comma_and_dot(self) -> None:
+        self.assertEqual(normalize_optional_float("19,5"), 19.5)
+        self.assertEqual(normalize_optional_float("19.5"), 19.5)
+        self.assertIsNone(normalize_optional_float(""))
+
+    def test_non_negative_integer_defaults_on_empty_or_negative_value(self) -> None:
+        self.assertEqual(
+            normalize_non_negative_int("", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
+            DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+        )
+        self.assertEqual(
+            normalize_non_negative_int("-1", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
+            DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+        )
+
+    def test_schedule_values_can_be_read_from_nested_shape(self) -> None:
+        normalized = normalize_room_options(
+            {
+                CONF_SCHEDULE: {
+                    CONF_SCHEDULE_HOME_START: "08:00:00",
+                    CONF_SCHEDULE_HOME_END: "20:00:00",
+                }
+            }
+        )
+
+        self.assertEqual(normalized[CONF_SCHEDULE_HOME_START], "08:00:00")
+        self.assertEqual(normalized[CONF_SCHEDULE_HOME_END], "20:00:00")
+
+    def test_schedule_window_validation_rejects_identical_values(self) -> None:
+        self.assertFalse(validate_room_schedule_window("08:00:00", "08:00:00"))
+        self.assertTrue(validate_room_schedule_window("08:00:00", "20:00:00"))

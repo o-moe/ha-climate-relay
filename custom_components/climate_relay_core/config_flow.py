@@ -11,6 +11,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
+from . import room_config
 from .const import (
     CONF_AWAY_TARGET_TEMPERATURE,
     CONF_AWAY_TARGET_TYPE,
@@ -32,7 +33,6 @@ from .const import (
     CONF_WINDOW_CUSTOM_TEMPERATURE,
     CONF_WINDOW_ENTITY_ID,
     CONF_WINDOW_OPEN_DELAY_SECONDS,
-    DEFAULT_AWAY_TARGET_TYPE,
     DEFAULT_FALLBACK_TEMPERATURE,
     DEFAULT_NAME,
     DEFAULT_SCHEDULE_HOME_END,
@@ -276,7 +276,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         exclude_index=self._editing_room_index,
                     ):
                         errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "profile_duplicate_area"
-                if submitted[CONF_SCHEDULE_HOME_START] == submitted[CONF_SCHEDULE_HOME_END]:
+                if not room_config.validate_room_schedule_window(
+                    submitted[CONF_SCHEDULE_HOME_START],
+                    submitted[CONF_SCHEDULE_HOME_END],
+                ):
                     errors[CONF_SCHEDULE_HOME_END] = "schedule_window_required"
                 if not errors:
                     if submitted[CONF_WINDOW_ACTION_TYPE] == "custom_temperature":
@@ -436,19 +439,7 @@ def _default_config_data() -> dict[str, Any]:
 
 def _default_room_data() -> dict[str, Any]:
     """Return the default regulation-profile configuration form values."""
-    return {
-        CONF_PRIMARY_CLIMATE_ENTITY_ID: None,
-        CONF_HUMIDITY_ENTITY_ID: None,
-        CONF_WINDOW_ENTITY_ID: None,
-        CONF_WINDOW_ACTION_TYPE: DEFAULT_WINDOW_ACTION_TYPE,
-        CONF_WINDOW_CUSTOM_TEMPERATURE: None,
-        CONF_WINDOW_OPEN_DELAY_SECONDS: DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
-        CONF_HOME_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE,
-        CONF_AWAY_TARGET_TYPE: DEFAULT_AWAY_TARGET_TYPE,
-        CONF_AWAY_TARGET_TEMPERATURE: DEFAULT_FALLBACK_TEMPERATURE - 3.0,
-        CONF_SCHEDULE_HOME_START: DEFAULT_SCHEDULE_HOME_START,
-        CONF_SCHEDULE_HOME_END: DEFAULT_SCHEDULE_HOME_END,
-    }
+    return room_config.default_room_data()
 
 
 def _normalize_reset_time(enabled: bool, raw_value: str | None) -> str | None:
@@ -534,42 +525,7 @@ def _normalize_options_values(values: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_room_options(values: dict[str, Any]) -> dict[str, Any]:
     """Normalize one regulation-profile configuration for rendering and persistence."""
-    return {
-        CONF_PRIMARY_CLIMATE_ENTITY_ID: _normalize_optional_entity_selector(
-            values.get(CONF_PRIMARY_CLIMATE_ENTITY_ID)
-        ),
-        CONF_HUMIDITY_ENTITY_ID: _normalize_optional_entity_selector(
-            values.get(CONF_HUMIDITY_ENTITY_ID)
-        ),
-        CONF_WINDOW_ENTITY_ID: _normalize_optional_entity_selector(
-            values.get(CONF_WINDOW_ENTITY_ID)
-        ),
-        CONF_WINDOW_ACTION_TYPE: _normalize_window_action_type_selector(
-            values.get(CONF_WINDOW_ACTION_TYPE, DEFAULT_WINDOW_ACTION_TYPE)
-        ),
-        CONF_WINDOW_CUSTOM_TEMPERATURE: _normalize_optional_float_selector(
-            values.get(CONF_WINDOW_CUSTOM_TEMPERATURE)
-        ),
-        CONF_WINDOW_OPEN_DELAY_SECONDS: _normalize_non_negative_int_selector(
-            values.get(CONF_WINDOW_OPEN_DELAY_SECONDS, DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
-            default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
-        ),
-        CONF_HOME_TARGET_TEMPERATURE: float(
-            values.get(CONF_HOME_TARGET_TEMPERATURE, DEFAULT_FALLBACK_TEMPERATURE)
-        ),
-        CONF_AWAY_TARGET_TYPE: _normalize_target_type_selector(
-            values.get(CONF_AWAY_TARGET_TYPE, DEFAULT_AWAY_TARGET_TYPE)
-        ),
-        CONF_AWAY_TARGET_TEMPERATURE: float(
-            values.get(CONF_AWAY_TARGET_TEMPERATURE, DEFAULT_FALLBACK_TEMPERATURE - 3.0)
-        ),
-        CONF_SCHEDULE_HOME_START: _normalize_time_field_value(
-            _schedule_value(values, CONF_SCHEDULE_HOME_START, DEFAULT_SCHEDULE_HOME_START)
-        ),
-        CONF_SCHEDULE_HOME_END: _normalize_time_field_value(
-            _schedule_value(values, CONF_SCHEDULE_HOME_END, DEFAULT_SCHEDULE_HOME_END)
-        ),
-    }
+    return room_config.normalize_room_options(_unwrap_room_selector_values(values))
 
 
 def _normalize_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
@@ -585,18 +541,7 @@ def _current_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _normalize_time_field_value(raw_value: Any) -> str | None:
     """Normalize reset-time values for displaying them back in the form."""
-    normalized = _unwrap_selector_value(raw_value)
-    if normalized in (None, ""):
-        return None
-    return str(normalized)
-
-
-def _schedule_value(values: dict[str, Any], key: str, default: str) -> Any:
-    """Return a schedule value from either flat or nested persistence."""
-    raw_schedule = _unwrap_selector_value(values.get(CONF_SCHEDULE))
-    if isinstance(raw_schedule, dict) and key in raw_schedule:
-        return raw_schedule[key]
-    return values.get(key, default)
+    return room_config.normalize_time_field_value(_unwrap_selector_value(raw_value))
 
 
 def _normalize_optional_entity_selector(raw_value: Any) -> str | None:
@@ -604,51 +549,76 @@ def _normalize_optional_entity_selector(raw_value: Any) -> str | None:
     normalized = _unwrap_selector_value(raw_value)
     if isinstance(normalized, dict):
         normalized = normalized.get("entity_id") or normalized.get("value")
-    if normalized in (None, ""):
-        return None
-    if not isinstance(normalized, str):
-        raise ValueError(f"Unsupported entity selector value: {raw_value!r}")
-    return normalized
+    try:
+        return room_config.normalize_optional_entity_id(normalized)
+    except ValueError as err:
+        raise ValueError(f"Unsupported entity selector value: {raw_value!r}") from err
 
 
 def _normalize_target_type_selector(raw_value: Any) -> str:
     """Normalize the away-target-type selector."""
     normalized = _normalize_select_value(raw_value)
-    if normalized not in {"absolute", "relative"}:
-        raise ValueError(f"Unsupported away target type: {raw_value!r}")
-    return normalized
+    try:
+        return room_config.normalize_target_type(normalized)
+    except ValueError as err:
+        raise ValueError(f"Unsupported away target type: {raw_value!r}") from err
 
 
 def _normalize_window_action_type_selector(raw_value: Any) -> str:
     """Normalize the window-action selector."""
     normalized = _normalize_select_value(raw_value)
-    if normalized not in {
-        "off",
-        "frost_protection",
-        "minimum_temperature",
-        "custom_temperature",
-    }:
-        raise ValueError(f"Unsupported window action type: {raw_value!r}")
-    return normalized
+    try:
+        return room_config.normalize_window_action_type(normalized)
+    except ValueError as err:
+        raise ValueError(f"Unsupported window action type: {raw_value!r}") from err
 
 
 def _normalize_optional_float_selector(raw_value: Any) -> float | None:
     """Normalize an optional number selector value."""
-    normalized = _unwrap_selector_value(raw_value)
-    if normalized in (None, ""):
-        return None
-    if isinstance(normalized, str):
-        normalized = normalized.strip().replace(",", ".")
-    return float(normalized)
+    return room_config.normalize_optional_float(_unwrap_selector_value(raw_value))
 
 
 def _normalize_non_negative_int_selector(raw_value: Any, *, default: int) -> int:
     """Normalize a non-negative integer selector value."""
-    normalized = _unwrap_selector_value(raw_value)
-    if normalized in (None, ""):
-        return default
-    value = int(normalized)
-    return value if value >= 0 else default
+    return room_config.normalize_non_negative_int(
+        _unwrap_selector_value(raw_value),
+        default=default,
+    )
+
+
+def _unwrap_room_selector_values(values: dict[str, Any]) -> dict[str, Any]:
+    """Unwrap room selector payloads before backend-owned normalization."""
+    unwrapped = dict(values)
+    for key in (
+        CONF_PRIMARY_CLIMATE_ENTITY_ID,
+        CONF_HUMIDITY_ENTITY_ID,
+        CONF_WINDOW_ENTITY_ID,
+    ):
+        unwrapped[key] = _normalize_optional_entity_selector(values.get(key))
+    for key in (
+        CONF_WINDOW_CUSTOM_TEMPERATURE,
+        CONF_WINDOW_OPEN_DELAY_SECONDS,
+        CONF_HOME_TARGET_TEMPERATURE,
+        CONF_AWAY_TARGET_TEMPERATURE,
+        CONF_SCHEDULE_HOME_START,
+        CONF_SCHEDULE_HOME_END,
+    ):
+        if key in values:
+            unwrapped[key] = _unwrap_selector_value(values.get(key))
+    if CONF_WINDOW_ACTION_TYPE in values:
+        unwrapped[CONF_WINDOW_ACTION_TYPE] = _normalize_window_action_type_selector(
+            values.get(CONF_WINDOW_ACTION_TYPE)
+        )
+    if CONF_AWAY_TARGET_TYPE in values:
+        unwrapped[CONF_AWAY_TARGET_TYPE] = _normalize_target_type_selector(
+            values.get(CONF_AWAY_TARGET_TYPE)
+        )
+    raw_schedule = _unwrap_selector_value(values.get(CONF_SCHEDULE))
+    if isinstance(raw_schedule, dict):
+        unwrapped[CONF_SCHEDULE] = {
+            key: _unwrap_selector_value(value) for key, value in raw_schedule.items()
+        }
+    return unwrapped
 
 
 def _resolve_room_entity_ids(
