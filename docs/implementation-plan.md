@@ -9,17 +9,25 @@ This document derives a prioritized implementation plan from the reviewed SRS in
 [README.md](../README.md), [architecture.md](./architecture.md),
 [architecture.md](./architecture.md),
 [discovery.md](./discovery.md), [rules.md](./rules.md),
-[engineering-standards.md](./engineering-standards.md), and
+[engineering-standards.md](./engineering-standards.md),
+[product-ux-vision.md](./product-ux-vision.md),
+[frontend-interaction-model.md](./frontend-interaction-model.md),
+[frontend-backend-contract.md](./frontend-backend-contract.md), and
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 The plan is intentionally backend-first and uses the current implementation
-state as the starting point.
+state as the starting point. Backend-first means the backend remains the source
+of truth for behavior; it does not mean delaying the first GUI vertical slice
+until every backend or Home Assistant surface is complete.
 
 ## Plan status
 
-- Status: Approved implementation baseline
+- Status: Approved implementation baseline with Epic 2 UX correction
 - Approval date: 2026-04-20
-- Decision: proceed with implementation in the defined epic and increment order
+- UX correction date: 2026-05-03
+- Decision: proceed with implementation in the defined epic and increment order,
+  while preventing permanent room-level product UX from moving into the
+  integration-global options flow
 - Governance: every increment remains subject to the delivery contract in
   [engineering-standards.md](./engineering-standards.md)
 
@@ -36,6 +44,25 @@ The repository currently provides only a thin implementation baseline:
 This means the highest-value gaps are still the global configuration model, the
 area-bound regulation model, logging and diagnostics, the rule engine, override lifecycle,
 persistence, Home Assistant runtime surface, and frontend/backend integration.
+
+## UX correction decision
+
+As of Epic 2 / Increment 2.3, the project distinguishes administrative Home
+Assistant setup flows from the target room-level product UI.
+
+The integration options flow may temporarily host room-level configuration
+during backend bootstrap work, but this is not the target user experience. New
+room-level product behavior shall be specified against the frontend
+room-management UI and the frontend/backend contract.
+
+Before adding further room-level options-flow complexity, the project shall
+preserve the daily-use frontend interaction model and document how any temporary
+options-flow behavior will migrate to the frontend or be removed.
+
+The first frontend slice shall include room overview, room detail, room
+activation/configuration, schedule editing for the initially supported schedule
+model, quick manual override, clear override / resume schedule, global mode
+control, and basic degraded-state indication.
 
 ## Global delivery contract
 
@@ -100,10 +127,15 @@ The plan is prioritized by dependency and risk:
 2. Establish shared configuration and diagnostics foundations before features
    that depend on them.
 3. Implement deterministic rule evaluation before Home Assistant exposure.
-4. Implement persistence and degraded behavior before user-facing controls.
-5. Expose the smallest stable Home Assistant surface before richer frontend
-   work.
-6. Keep frontend work strictly dependent on backend-owned state and actions.
+4. Define frontend interaction contracts before adding further room-level
+   options-flow complexity.
+5. Implement persistence and degraded behavior before broad release-capable
+   user-facing controls.
+6. Expose only the backend-owned room-management entry points required by the
+   first GUI vertical slice before implementing that slice.
+7. Use the first GUI vertical slice as an early validation driver for the
+   room-first product model.
+8. Keep frontend work strictly dependent on backend-owned state and actions.
 
 ## Epic 1: Foundation complete
 
@@ -195,11 +227,88 @@ resolver expected from the product.
 - Exit criteria: fallback and failure handling are product-owner testable as
   stable user-visible behavior.
 
-## Epic 3: Reliability and recovery
+## Epic 3: Frontend contract correction and early GUI vertical slice
 
-Goal: make the backend reliable under restart and component failure.
+Goal: prevent room-level product UX from becoming permanent options-flow UX and
+validate the room-first GUI early, while adding only the smallest backend-owned
+room-management operations required by that GUI slice.
 
-### Increment 3.1: Durable state persistence and startup recomputation
+### Increment 3.0: Frontend contract and room-management UX skeleton
+
+- Scope: define the product UX vision, frontend interaction model, and
+  frontend/backend contract; introduce the first room-management UI skeleton
+  target before further room-level options-flow expansion.
+- User value: room-level climate behavior is no longer designed as
+  integration-global options-flow configuration.
+- Product-owner acceptance: room activation, room schedule editing, and quick
+  override are specified as frontend room-management flows, while the existing
+  options-flow room configuration is documented as temporary bootstrap
+  scaffolding.
+- Requirements: `FR-060` to `FR-062`, `FR-071`, `FR-077` to `FR-079`,
+  `FR-100`, `QR-050`, `QR-060`.
+- Verification focus: `V-DR-001`, `V-DR-002`, `V-DR-003`, `V-AT-004`.
+- Exit criteria: product UX docs, frontend interaction model,
+  frontend/backend contract, and verification criteria exist and are linked
+  from the implementation plan.
+
+### Increment 3.1: Room configuration validation extraction
+
+- Status: completed by the current branch work.
+- Scope: behavior-neutral extraction of reusable room/profile normalization and
+  pure validation from `config_flow.py` into `room_config.py`.
+- Non-scope: no new API, no frontend, no config subentries, no persistence
+  change, and no room-level options-flow UX expansion.
+- Verification focus: pure helper unit tests plus unchanged options-flow
+  behavior coverage.
+- Exit criteria: existing `rooms` persistence shape and user-visible Options
+  Flow behavior remain unchanged while room/profile normalization can be reused
+  by later backend-owned room-management operations.
+
+### Increment 3.2: Minimal backend-owned room-management entry point
+
+- Scope: provide the smallest backend-owned operations required by the first
+  GUI vertical slice. The operations shall support activating, updating, and
+  disabling one room/profile while preserving the existing `rooms` persistence
+  format.
+- Non-scope: no broad backend API, no Options Flow UX expansion, no config
+  subentries, and no new persistence format.
+- Guardrail: no additional room-management backend abstraction may be added
+  before the first GUI vertical slice unless it is directly required by that
+  vertical slice.
+- Verification focus: backend validation and persistence/reload tests for one
+  activated, updated, and disabled room/profile using the existing `rooms`
+  shape.
+- Exit criteria: the first GUI slice has enough backend-owned operations to
+  manage one room without mutating Home Assistant config entries directly and
+  without expanding the temporary options-flow room manager.
+
+### Increment 3.3: First GUI vertical slice
+
+- Scope: deliver the first custom card / dashboard frontend slice that validates
+  the room-first UX early. This slice validates daily-use behavior; it is not
+  the final frontend.
+- Required flow: list eligible Home Assistant areas and climate candidates;
+  activate one room through a backend-owned operation; show the activated room
+  as a room tile; show effective target and active control context; edit the
+  initially supported daily schedule model; set a quick manual override; clear
+  override / resume schedule.
+- Constraints: backend remains the source of truth; the frontend does not own
+  rule evaluation, schedule evaluation, fallback semantics, degraded-state
+  semantics, or persistence semantics.
+- Verification focus: executable frontend acceptance for the single-room
+  vertical path plus backend/frontend integration evidence for state, schedule
+  update, override, clear override, and persistence.
+- Exit criteria: a product owner can complete the first room activation and
+  daily-use control loop from the GUI without Developer Tools, raw attributes,
+  or direct config-entry mutation.
+
+## Epic 4: Reliability, recovery, and Home Assistant surface completion
+
+Goal: make the backend reliable under restart and component failure while
+keeping native Home Assistant surfaces intentionally small and downstream of
+the backend-owned room model.
+
+### Increment 4.1: Durable state persistence and startup recomputation
 
 - Scope: persist global mode, primary-climate-anchored regulation-profile
   configuration, inherited area placement, and active overrides; reload state
@@ -210,7 +319,7 @@ Goal: make the backend reliable under restart and component failure.
   specification-by-example cases, including the rule that window-delay timers
   are not blindly resumed.
 
-### Increment 3.2: Degradation exposure and operator diagnostics
+### Increment 4.2: Degradation exposure and operator diagnostics
 
 - Scope: surface optional-sensor degradation and required-component fallback in
   runtime state and logs, including an explicit user-facing status or diagnosis
@@ -224,12 +333,7 @@ Goal: make the backend reliable under restart and component failure.
   and operators, with bounded vocabulary, a deliberately chosen HA-facing
   status surface, and test evidence.
 
-## Epic 4: Home Assistant surface completion
-
-Goal: expose the smallest correct runtime interface through native Home
-Assistant patterns.
-
-### Increment 4.1: Runtime actions and integration orchestration
+### Increment 4.3: Runtime actions and integration orchestration
 
 - Scope: register integration actions for global mode changes and area override
   operations; map validated runtime commands to application services.
@@ -238,7 +342,7 @@ Assistant patterns.
 - Exit criteria: integration actions are fully validated, area-scoped, and
   tested through Home Assistant integration tests.
 
-### Increment 4.2: Entity model and explanatory attributes
+### Increment 4.4: Entity model and explanatory attributes
 
 - Scope: expose one regulation `climate` entity per configured profile, grouped
   into the inherited HA area, plus one global `select` entity and the minimal
@@ -251,10 +355,10 @@ Assistant patterns.
   timestamps serialize consistently in local time with offset, and attribute
   semantics are documented.
 
-## Epic 5: Frontend integration on top of backend-owned state
+## Epic 5: Frontend hardening on top of backend-owned state
 
-Goal: deliver the first real user-facing frontend without moving behavioral
-ownership out of the backend.
+Goal: harden and extend the frontend after the first GUI vertical slice without
+moving behavioral ownership out of the backend.
 
 Distribution rule for Epic 5:
 
@@ -262,17 +366,18 @@ Distribution rule for Epic 5:
   `Integration`-type HACS custom repository
 - the frontend card/strategy UI shall be packaged for HACS as a separate
   `Dashboard`-type custom repository with its distributable `.js` assets
-### Increment 5.1: Dashboard card wired to Home Assistant state
 
-- Scope: replace the static frontend scaffold with a custom card reading real
-  Home Assistant area/floor structure, backend-owned state, and explanatory
-  area attributes.
+### Increment 5.1: Frontend state breadth and distribution hardening
+
+- Scope: extend the first GUI vertical slice into a broader custom card reading
+  real Home Assistant area/floor structure, backend-owned state, and
+  explanatory area attributes.
 - Requirements: `FR-060` to `FR-062`, `FR-067`, `FR-077` to `FR-079`,
   `QR-050`, `QR-060`.
 - Verification focus: `V-IT-006`, `V-AT-004`, `V-DR-001`, `V-DR-002`.
 - Exit criteria: the card renders backend-owned area/global state on top of
-  Home Assistant's existing house structure without
-  duplicating rule logic in TypeScript.
+  Home Assistant's existing house structure without duplicating rule logic in
+  TypeScript.
 
 ### Increment 5.2: Frontend control flows and optional strategy
 
@@ -290,26 +395,32 @@ The recommended release path is:
 
 1. `M1 Foundation complete`: Epic 1
 2. `M2 Core automation complete`: Increment 2.1, 2.2, 2.3
-3. `M3 Reliable runtime`: Increment 3.1, 3.2
-4. `M4 Home Assistant usable baseline`: Increment 4.1, 4.2
-5. `M5 First coherent frontend`: Increment 5.1
-6. `M6 Frontend convenience`: Increment 5.2
+3. `M3 Frontend contract corrected`: Increment 3.0, 3.1
+4. `M4 First GUI vertical slice`: Increment 3.2, 3.3
+5. `M5 Reliable Home Assistant baseline`: Increment 4.1 to 4.4
+6. `M6 Frontend hardening`: Increment 5.1
+7. `M7 Frontend convenience`: Increment 5.2
 
-This sequencing keeps all user-visible surfaces downstream of a tested and
-restart-safe backend.
+This sequencing keeps the first GUI slice downstream of the smallest tested
+backend-owned room-management contract while preventing room-level product UX
+from being permanently shaped by the integration-global options flow.
 
 ## Finalization decisions
 
 The plan is finalized with the following binding decisions:
 
 - Backend-first sequencing remains mandatory.
+- Backend-first does not mean options-flow-first for room-level product UX.
 - No frontend feature may become the owner of behavioral logic.
+- Room-level options-flow configuration is temporary bootstrap scaffolding and
+  shall be reduced or removed once frontend room management can write to the
+  backend-owned configuration model.
 - No increment may skip TDD, required verification artifacts, quality gates, or
   documentation updates.
-- The first release-capable implementation target is `M4 Home Assistant usable
-  baseline`.
-- `M5` and `M6` remain downstream of the stable backend and Home Assistant
-  runtime surface.
+- The first GUI vertical slice is planned before the full reliable Home
+  Assistant baseline to validate the product UX early.
+- `M6` and `M7` harden and extend frontend work after the first GUI vertical
+  slice instead of introducing the first coherent frontend.
 
 ## Definition of done per increment
 

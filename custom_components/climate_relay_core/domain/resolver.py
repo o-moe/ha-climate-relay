@@ -42,10 +42,24 @@ def resolve_regulation_state(
     window_target: EffectiveTarget | None = None,
     primary_available: bool,
     fallback_temperature: float,
+    last_valid_target_temperature: float | None = None,
+    default_fallback_temperature: float = 20.0,
     now: datetime,
     timezone: ZoneInfo,
 ) -> RegulationResolution:
     """Resolve the effective regulation state with deterministic rule priority."""
+    if not primary_available:
+        return RegulationResolution(
+            effective_target=EffectiveTarget(
+                hvac_mode="heat",
+                preset_mode=None,
+                target_temperature=fallback_temperature,
+            ),
+            active_context="fallback",
+            next_change_at=None,
+            override_ends_at=None,
+        )
+
     if window_target is not None:
         return RegulationResolution(
             effective_target=window_target,
@@ -66,51 +80,75 @@ def resolve_regulation_state(
             override_ends_at=manual_override.ends_at,
         )
 
-    if not primary_available:
-        return RegulationResolution(
-            effective_target=EffectiveTarget(
-                hvac_mode="heat",
-                preset_mode=None,
-                target_temperature=fallback_temperature,
-            ),
-            active_context="fallback",
-            next_change_at=None,
-            override_ends_at=None,
-        )
-
     if effective_presence is EffectivePresence.AWAY:
+        try:
+            target_temperature = resolve_room_target(
+                EffectivePresence.AWAY,
+                home_target=home_target,
+                away_target=away_target,
+            )
+        except ValueError:
+            return _resolve_exceptional_fallback(
+                last_valid_target_temperature=last_valid_target_temperature,
+                default_fallback_temperature=default_fallback_temperature,
+            )
         return RegulationResolution(
             effective_target=EffectiveTarget(
                 hvac_mode="heat",
                 preset_mode=None,
-                target_temperature=resolve_room_target(
-                    EffectivePresence.AWAY,
-                    home_target=home_target,
-                    away_target=away_target,
-                ),
+                target_temperature=target_temperature,
             ),
             active_context="schedule",
             next_change_at=None,
             override_ends_at=None,
         )
 
-    schedule_evaluation = evaluate_schedule(schedule, now, timezone)
-    schedule_presence = (
-        EffectivePresence.HOME
-        if schedule_evaluation.target == EffectivePresence.HOME.value
-        else EffectivePresence.AWAY
+    try:
+        schedule_evaluation = evaluate_schedule(schedule, now, timezone)
+        schedule_presence = (
+            EffectivePresence.HOME
+            if schedule_evaluation.target == EffectivePresence.HOME.value
+            else EffectivePresence.AWAY
+        )
+        target_temperature = resolve_room_target(
+            schedule_presence,
+            home_target=home_target,
+            away_target=away_target,
+        )
+    except ValueError:
+        return _resolve_exceptional_fallback(
+            last_valid_target_temperature=last_valid_target_temperature,
+            default_fallback_temperature=default_fallback_temperature,
+        )
+    return RegulationResolution(
+        effective_target=EffectiveTarget(
+            hvac_mode="heat",
+            preset_mode=None,
+            target_temperature=target_temperature,
+        ),
+        active_context="schedule",
+        next_change_at=schedule_evaluation.next_change_at,
+        override_ends_at=None,
+    )
+
+
+def _resolve_exceptional_fallback(
+    *,
+    last_valid_target_temperature: float | None,
+    default_fallback_temperature: float,
+) -> RegulationResolution:
+    target_temperature = (
+        last_valid_target_temperature
+        if last_valid_target_temperature is not None
+        else default_fallback_temperature
     )
     return RegulationResolution(
         effective_target=EffectiveTarget(
             hvac_mode="heat",
             preset_mode=None,
-            target_temperature=resolve_room_target(
-                schedule_presence,
-                home_target=home_target,
-                away_target=away_target,
-            ),
+            target_temperature=target_temperature,
         ),
-        active_context="schedule",
-        next_change_at=schedule_evaluation.next_change_at,
+        active_context="fallback",
+        next_change_at=None,
         override_ends_at=None,
     )

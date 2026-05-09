@@ -27,8 +27,8 @@
         "data_description": {
           "person_entity_ids": "Used to resolve automatic home or away presence when Presence Control is set to Automatic.",
           "unknown_state_handling": "Choose whether unknown or unavailable tracked entities should be treated as home or away.",
-          "fallback_temperature": "Fallback target temperature reserved for later failure-handling and room-control slices.",
-          "manual_override_reset_enabled": "Enable a daily reset point for manual overrides once area-level overrides are available.",
+          "fallback_temperature": "Target temperature used when a required profile climate component is missing, unknown, or unavailable.",
+          "manual_override_reset_enabled": "Enable a daily reset point for active manual overrides.",
           "manual_override_reset_time": "Only required when the daily override reset is enabled.",
           "simulation_mode": "Evaluate control behavior and log decisions without sending future actuator writes.",
           "verbose_logging": "Add more detailed diagnostic log output for troubleshooting."

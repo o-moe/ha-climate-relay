@@ -834,7 +834,7 @@ Examples:
   states.
 - Fit criterion: The specification defines one deterministic fallback result for
   areas without a valid resolved target.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for invalid runtime target data in Epic 2
 
 #### FR-056 Fallback target priority
 
@@ -847,7 +847,7 @@ Examples:
   default provides deterministic recovery when no prior valid state exists.
 - Fit criterion: In fallback situations, the resolved target is either the last
   valid area target or 20 C when no last valid target is available.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for invalid runtime target data in Epic 2
 
 #### FR-068 Global fallback target for required device failure
 
@@ -859,7 +859,7 @@ Examples:
   deterministic and user-defined safe behavior.
 - Fit criterion: The system configuration includes a global fallback
   temperature for required-component failure situations.
-- Status: Confirmed direction
+- Status: Confirmed by implementation
 
 #### FR-069 Required-component failure handling
 
@@ -872,7 +872,8 @@ Examples:
 - Fit criterion: When a required climate entity or another required control
   component is unavailable, the area resolves to the configured global fallback
   target temperature.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for primary climate missing, `unknown`,
+  and `unavailable` states in Epic 2
 
 ### 9.8 Persistence and restart recovery
 
@@ -1386,7 +1387,8 @@ Examples:
 - Source: Requirements baseline and elicitation
 - Fit criterion: For each supported degradation case, the system reaches a
   documented effective state or fallback path.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for optional-sensor degradation and
+  required primary-climate fallback in Epic 2
 
 #### QR-031 Restart-safe recomputation
 
@@ -1407,7 +1409,8 @@ Examples:
 - Source: Requirements elicitation on degraded sensor and component handling
 - Fit criterion: Area state exposes enough information for the frontend to
   distinguish normal, degraded, and fallback operation.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for the area climate entity's
+  `degradation_status` attribute in Epic 2
 
 #### QR-041 Operator-readable logging
 
@@ -1419,7 +1422,8 @@ Examples:
   override creation or replacement, window override activation, and
   simulation-mode suppressed writes can be found in structured or consistently
   worded logs.
-- Status: Confirmed direction
+- Status: Confirmed by implementation for fallback entry, override creation or
+  replacement, and simulation-mode suppressed writes
 
 ### 10.6 Usability and configuration quality
 

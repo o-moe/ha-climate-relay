@@ -17,6 +17,8 @@ climate control.
 - manual overrides for configured area-bound regulation profiles through Home Assistant services
 - delayed open-window automation for configured area-bound regulation profiles
 - bounded multi-area runtime behavior when more than one profile is configured
+- required primary-climate failure falls back to the configured fallback
+  temperature and exposes `degradation_status = required_component_fallback`
 - optional verbose diagnostic logging
 
 ## Installation
@@ -82,7 +84,8 @@ The options dialog includes short inline explanations. At a high level:
 
 - tracked presence entities drive `Automatic` presence resolution
 - unknown-state handling defines how missing person state is interpreted
-- fallback temperature is reserved for later room/failure handling
+- fallback temperature is used when a required profile climate component is missing,
+  `unknown`, or `unavailable`
 - daily override reset clears active manual overrides at the configured local time
 - simulation mode keeps future actuator writes suppressed while still logging intended behavior
 - verbose logging expands diagnostic output for troubleshooting
@@ -146,7 +149,6 @@ suppressed as already applied.
 
 ## Current Limitations
 
-- only one area-bound regulation profile is supported
 - global mode and manual override runtime state remain in memory and are
   recomputed or cleared after restart; full durable runtime persistence is a
   later epic concern

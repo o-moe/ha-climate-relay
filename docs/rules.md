@@ -52,14 +52,27 @@ The schedule domain model also validates the planned broader layouts:
 
 Priority order:
 
-1. window override
-2. manual area override
-3. effective global mode and area schedule
-4. fallback state
+1. required-component fallback
+2. window override
+3. manual area override
+4. effective global mode and area schedule
+5. exceptional fallback state
 
 Epic 2 enables the window-priority branch for configured window contacts. Window
 override is evaluated before manual override so open-window protection remains
 deterministic while the contact is active.
+
+Required-component fallback is evaluated first because a missing, `unknown`, or
+`unavailable` primary climate entity prevents normal control from being
+applied safely. In that case the area resolves to the configured global
+fallback temperature and exposes fallback context instead of pretending that a
+higher-level rule can be acted on.
+
+Exceptional fallback is reserved for invalid or incomplete runtime state where
+normal rule evaluation cannot produce a valid temperature target even though
+the required climate component is available. It reuses the last valid
+temperature-based target known for the profile when one exists; otherwise it
+uses 20 C.
 
 ## Window override
 

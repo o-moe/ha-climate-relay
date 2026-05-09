@@ -6,7 +6,7 @@ import logging
 from datetime import timedelta
 from typing import Final
 
-from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_MIN_TEMP,
     ATTR_PRESET_MODES,
@@ -80,6 +80,7 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
+    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
     def __init__(
         self,
@@ -133,10 +134,10 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
-        primary_state = self._primary_state
-        if primary_state is None:
+        if not self._primary_available:
             return HVACMode.HEAT
 
+        primary_state = self._primary_state
         state = str(primary_state.state)
         try:
             return HVACMode(state)
@@ -146,10 +147,10 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return supported HVAC modes."""
-        primary_state = self._primary_state
-        if primary_state is None:
+        if not self._primary_available:
             return [HVACMode.HEAT]
 
+        primary_state = self._primary_state
         modes = []
         for value in primary_state.attributes.get(ATTR_HVAC_MODES, [HVACMode.HEAT]):
             try:
@@ -166,9 +167,9 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     @property
     def current_temperature(self) -> float | None:
         """Return the upstream current temperature when available."""
-        primary_state = self._primary_state
-        if primary_state is None:
+        if not self._primary_available:
             return None
+        primary_state = self._primary_state
         value = primary_state.attributes.get(ATTR_CURRENT_TEMPERATURE)
         return float(value) if isinstance(value, int | float) else None
 
@@ -237,19 +238,24 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             effective_presence=self._runtime.effective_presence,
             manual_override=self._manual_override,
             window_target=self._window_target,
-            primary_available=self._primary_state is not None,
+            primary_available=self._primary_available,
             fallback_temperature=self._runtime.config.fallback_temperature,
+            last_valid_target_temperature=self._last_applied_target_temperature,
             now=dt_util.now(),
             timezone=dt_util.DEFAULT_TIME_ZONE,
         )
 
     @property
     def _degradation_status(self) -> str | None:
-        if self._primary_state is None:
+        if not self._primary_available:
             return DEGRADATION_REQUIRED_COMPONENT_FALLBACK
         if _is_unavailable(self._humidity_state) or _is_unavailable(self._window_state):
             return DEGRADATION_OPTIONAL_SENSOR_UNAVAILABLE
         return None
+
+    @property
+    def _primary_available(self) -> bool:
+        return self._primary_state is not None and not _is_unavailable(self._primary_state)
 
     @property
     def _window_target(self) -> EffectiveTarget | None:
@@ -374,7 +380,14 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         return self._resolution.next_change_at
 
     async def _async_apply_effective_target(self, *, source: str) -> None:
-        if self._primary_state is None:
+        if not self._primary_available:
+            _LOGGER.warning(
+                "Required climate component unavailable for %s; "
+                "resolved fallback target %.1f via %s and skipped device write",
+                self._room_config.primary_climate_entity_id,
+                self._resolution.target_temperature,
+                source,
+            )
             return
 
         effective_target = self._resolution.effective_target

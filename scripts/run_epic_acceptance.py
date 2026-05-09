@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
-EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.28"
+EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.30"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 EPIC_2_PRIMARY_CLIMATES = (
@@ -189,6 +189,33 @@ def _wait_for_room_context(
             raise AcceptanceError(
                 f"Timed out waiting for {entity_id} active_control_context="
                 f"{expected_context!r}; last payload={payload!r}."
+            )
+        time.sleep(0.5)
+
+
+def _wait_for_room_attributes(
+    *,
+    base_url: str,
+    token: str,
+    entity_id: str,
+    expected_attributes: dict[str, Any],
+    timeout_seconds: float = 20.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        payload = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/states/{entity_id}",
+        )
+        if isinstance(payload, dict):
+            attributes = payload.get("attributes", {})
+            if all(attributes.get(key) == value for key, value in expected_attributes.items()):
+                return
+        if time.monotonic() >= deadline:
+            raise AcceptanceError(
+                f"Timed out waiting for {entity_id} attributes "
+                f"{expected_attributes!r}; last payload={payload!r}."
             )
         time.sleep(0.5)
 
@@ -1374,6 +1401,56 @@ def _run_epic_2(
         token=token,
         area_id=EPIC_2_PRIMARY_CLIMATES[0],
     )
+    _wait_for_room_context(
+        base_url=base_url,
+        token=token,
+        entity_id=office_room_entity_id,
+        expected_context="schedule",
+    )
+
+    print("[acceptance] Mark required primary climate unavailable and expect fallback")
+    office_primary_available_state = {
+        "friendly_name": "Virtual Climate Office",
+        "hvac_modes": ["off", "heat"],
+        "temperature": 20.0,
+        "current_temperature": 19.5,
+        "min_temp": 5.0,
+    }
+    try:
+        _set_entity_state(
+            base_url=base_url,
+            token=token,
+            entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+            state="unavailable",
+            attributes=office_primary_available_state,
+        )
+        _wait_for_room_attributes(
+            base_url=base_url,
+            token=token,
+            entity_id=office_room_entity_id,
+            expected_attributes={
+                "active_control_context": "fallback",
+                "degradation_status": "required_component_fallback",
+                "temperature": 20.0,
+            },
+        )
+        _wait_for_room_context(
+            base_url=base_url,
+            token=token,
+            entity_id=living_room_entity_id,
+            expected_context="schedule",
+        )
+    finally:
+        print("[acceptance] Restore required primary climate")
+        _set_entity_state(
+            base_url=base_url,
+            token=token,
+            entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+            state="heat",
+            attributes=office_primary_available_state,
+        )
+
+    print("[acceptance] Expect normal reevaluation after required primary climate restore")
     _wait_for_room_context(
         base_url=base_url,
         token=token,
