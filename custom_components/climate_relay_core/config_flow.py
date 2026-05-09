@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
-from . import room_config
+from . import room_config, room_management
 from .const import (
     CONF_AWAY_TARGET_TEMPERATURE,
     CONF_AWAY_TARGET_TYPE,
@@ -291,6 +291,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         return self._create_options_entry(self._current_pending_rooms())
                     return await self.async_step_profiles()
                 room_values = submitted
+            except room_management.RoomManagementError as err:
+                _map_room_management_error(errors, err)
             except Exception:
                 _LOGGER.exception("Failed to validate room settings payload: %r", user_input)
                 errors["base"] = "unknown"
@@ -334,6 +336,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     if not self._profile_management_active:
                         return self._create_options_entry(self._current_pending_rooms())
                     return await self.async_step_profiles()
+            except room_management.RoomManagementError as err:
+                _map_room_management_error(errors, err)
             except ValueError:
                 errors[CONF_WINDOW_CUSTOM_TEMPERATURE] = "window_custom_temperature_invalid"
             except Exception:
@@ -367,9 +371,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
         """Store the submitted profile in the pending profile list."""
         rooms = self._current_pending_rooms()
         if self._editing_room_index is None:
-            rooms.append(room)
+            self._pending_rooms = room_management.activate_room(rooms, room)
         else:
-            rooms[self._editing_room_index] = room
+            room_ref = rooms[self._editing_room_index][CONF_PRIMARY_CLIMATE_ENTITY_ID]
+            self._pending_rooms = room_management.update_room(rooms, room_ref, room)
         self._pending_room = None
         self._editing_room_index = None
 
@@ -405,7 +410,10 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                     if index < 0 or index >= len(rooms):
                         errors[CONF_PROFILE_INDEX] = "profile_required"
                     elif remove:
-                        rooms.pop(index)
+                        self._pending_rooms = room_management.disable_room(
+                            rooms,
+                            rooms[index][CONF_PRIMARY_CLIMATE_ENTITY_ID],
+                        )
                         self._pending_room = None
                         self._editing_room_index = None
                         return await self.async_step_profiles()
@@ -413,6 +421,8 @@ class ClimateRelayCoreOptionsFlow(config_entries.OptionsFlow):
                         self._editing_room_index = index
                         self._pending_room = None
                         return await self.async_step_room()
+            except room_management.RoomManagementError as err:
+                _map_room_management_error(errors, err)
             except Exception:
                 _LOGGER.exception("Failed to validate profile selection payload: %r", user_input)
                 errors["base"] = "unknown"
@@ -537,6 +547,19 @@ def _normalize_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
 def _current_rooms(values: dict[str, Any]) -> list[dict[str, Any]]:
     """Return normalized stored regulation-profile data."""
     return _normalize_rooms(values)
+
+
+def _map_room_management_error(
+    errors: dict[str, str],
+    err: room_management.RoomManagementError,
+) -> None:
+    """Map room-management validation errors to existing Options Flow errors."""
+    if isinstance(err, room_management.MissingPrimaryClimateError):
+        errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "primary_climate_required"
+    elif isinstance(err, room_management.DuplicatePrimaryClimateError):
+        errors[CONF_PRIMARY_CLIMATE_ENTITY_ID] = "profile_duplicate_area"
+    else:
+        errors["base"] = "unknown"
 
 
 def _normalize_time_field_value(raw_value: Any) -> str | None:

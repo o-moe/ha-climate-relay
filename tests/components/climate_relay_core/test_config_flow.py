@@ -787,6 +787,47 @@ class OptionsFlowTests(IsolatedAsyncioTestCase):
             {CONF_PRIMARY_CLIMATE_ENTITY_ID: "profile_duplicate_area"},
         )
 
+    async def test_room_step_maps_room_management_duplicate_error(self) -> None:
+        config_entry = Mock()
+        config_entry.options = {
+            CONF_ROOMS: [
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 20.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 17.0,
+                }
+            ]
+        }
+        flow = ClimateRelayCoreOptionsFlow(config_entry)
+        flow.hass = Mock()
+        flow.async_show_form = Mock(return_value={"type": "form"})
+        flow._profile_management_active = True
+
+        with (
+            patch(
+                "custom_components.climate_relay_core.config_flow._resolve_area_reference",
+                return_value=SimpleNamespace(area_id="office", area_name="Office"),
+            ),
+            patch(
+                "custom_components.climate_relay_core.config_flow._has_duplicate_profile_anchor",
+                return_value=False,
+            ),
+        ):
+            await flow.async_step_room(
+                {
+                    CONF_PRIMARY_CLIMATE_ENTITY_ID: "climate.office",
+                    CONF_HOME_TARGET_TEMPERATURE: 19.0,
+                    CONF_AWAY_TARGET_TYPE: "absolute",
+                    CONF_AWAY_TARGET_TEMPERATURE: 16.0,
+                }
+            )
+
+        self.assertEqual(
+            flow.async_show_form.call_args.kwargs["errors"],
+            {CONF_PRIMARY_CLIMATE_ENTITY_ID: "profile_duplicate_area"},
+        )
+
     async def test_room_step_rejects_missing_primary_climate_entity(self) -> None:
         config_entry = Mock()
         config_entry.options = {}

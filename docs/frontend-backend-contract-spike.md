@@ -17,12 +17,17 @@ This document is intentionally a contract and gap analysis. It does not introduc
 a frontend, a new Options Flow surface, config subentries, or a new persistence
 format.
 
-The next implementation step must not introduce new Home Assistant services,
-WebSocket APIs, config subentries, or frontend APIs. It is limited to a
-behavior-neutral extraction of reusable room/profile validation and
-normalization from `custom_components/climate_relay_core/config_flow.py`. A
-later frontend-facing state provider or API should only be introduced after the
-concrete frontend consumption model has been explicitly chosen.
+Increment 3.1 extracted behavior-neutral room/profile validation and
+normalization from `custom_components/climate_relay_core/config_flow.py`.
+Increment 3.2 adds the minimal backend-owned room-management entry point in
+`custom_components/climate_relay_core/room_management.py`. That entry point
+still works on the existing `rooms` options shape and only supports activating,
+updating, or disabling one room/profile at a time. It does not add Home
+Assistant services, WebSocket APIs, config subentries, frontend APIs, or a new
+persistence format.
+
+A later frontend-facing state provider or API should only be introduced after
+the concrete frontend consumption model has been explicitly chosen.
 
 This spike refines the target direction already documented in
 [product-ux-vision.md](./product-ux-vision.md),
@@ -88,6 +93,13 @@ room options. `build_room_configs(...)` currently derives
 `RegulationProfileConfig.profile_id` from `slugify(primary_climate_entity_id)`.
 That identifier is stable only while the primary climate entity ID remains
 unchanged.
+
+The Increment 3.2 room-management entry point therefore uses
+`primary_climate_entity_id` as the temporary room reference for activation,
+update, and disable operations. This is a transitional reference strategy only.
+It must be replaced or wrapped by a stable profile-ID contract before the
+frontend depends on durable room identities. Increment 3.2 deliberately does
+not introduce that profile-ID migration.
 
 ### Current regulation-profile fields
 
@@ -542,12 +554,18 @@ Required room state:
 - Room configuration update.
 - Room removal/disable.
 - Candidate selection through HA selectors.
-- Duplicate primary climate validation.
 - Duplicate HA area validation.
 - Primary climate area requirement validation.
 - Schedule start/end entry and identical start/end rejection.
 - Window custom temperature follow-up validation.
 - Most room configuration normalization from selector-shaped payloads.
+
+The minimal Increment 3.2 room-management entry point moves duplicate primary
+climate validation into a pure backend-owned operation that can be reused by the
+current Options Flow and a future frontend-facing entry point. Duplicate
+Home Assistant area validation remains HA-registry-/adapter-near because it
+requires resolving entity and device registry context. The current Options Flow
+continues to own that validation until a candidate or registry adapter exists.
 
 ### Layer boundaries for extraction
 
