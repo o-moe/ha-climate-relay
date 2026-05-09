@@ -43,12 +43,12 @@ class RoomConfigTest(TestCase):
             }
         )
 
-        self.assertEqual(normalized[CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.living_room")
-        self.assertEqual(normalized[CONF_HOME_TARGET_TEMPERATURE], 21.5)
-        self.assertEqual(normalized[CONF_AWAY_TARGET_TEMPERATURE], 18.0)
-        self.assertEqual(normalized[CONF_WINDOW_OPEN_DELAY_SECONDS], 30)
-        self.assertEqual(normalized[CONF_SCHEDULE_HOME_START], "07:00:00")
-        self.assertEqual(normalized[CONF_SCHEDULE_HOME_END], "22:00:00")
+        self.assertEqual("climate.living_room", normalized[CONF_PRIMARY_CLIMATE_ENTITY_ID])
+        self.assertEqual(21.5, normalized[CONF_HOME_TARGET_TEMPERATURE])
+        self.assertEqual(18.0, normalized[CONF_AWAY_TARGET_TEMPERATURE])
+        self.assertEqual(30, normalized[CONF_WINDOW_OPEN_DELAY_SECONDS])
+        self.assertEqual("07:00:00", normalized[CONF_SCHEDULE_HOME_START])
+        self.assertEqual("22:00:00", normalized[CONF_SCHEDULE_HOME_END])
 
     def test_normalize_rooms_filters_non_dict_entries(self) -> None:
         normalized = normalize_rooms(
@@ -63,8 +63,8 @@ class RoomConfigTest(TestCase):
             }
         )
 
-        self.assertEqual(len(normalized), 1)
-        self.assertEqual(normalized[0][CONF_PRIMARY_CLIMATE_ENTITY_ID], "climate.office")
+        self.assertEqual(1, len(normalized))
+        self.assertEqual("climate.office", normalized[0][CONF_PRIMARY_CLIMATE_ENTITY_ID])
 
     def test_normalize_room_options_rejects_invalid_away_target_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported away target type"):
@@ -75,18 +75,18 @@ class RoomConfigTest(TestCase):
             normalize_room_options({CONF_WINDOW_ACTION_TYPE: "unsupported"})
 
     def test_optional_float_accepts_strings_with_comma_and_dot(self) -> None:
-        self.assertEqual(normalize_optional_float("19,5"), 19.5)
-        self.assertEqual(normalize_optional_float("19.5"), 19.5)
+        self.assertEqual(19.5, normalize_optional_float("19,5"))
+        self.assertEqual(19.5, normalize_optional_float("19.5"))
         self.assertIsNone(normalize_optional_float(""))
 
     def test_non_negative_integer_defaults_on_empty_or_negative_value(self) -> None:
         self.assertEqual(
-            normalize_non_negative_int("", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
             DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+            normalize_non_negative_int("", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
         )
         self.assertEqual(
-            normalize_non_negative_int("-1", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
             DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
+            normalize_non_negative_int("-1", default=DEFAULT_WINDOW_OPEN_DELAY_SECONDS),
         )
 
     def test_schedule_values_can_be_read_from_nested_shape(self) -> None:
@@ -99,8 +99,8 @@ class RoomConfigTest(TestCase):
             }
         )
 
-        self.assertEqual(normalized[CONF_SCHEDULE_HOME_START], "08:00:00")
-        self.assertEqual(normalized[CONF_SCHEDULE_HOME_END], "20:00:00")
+        self.assertEqual("08:00:00", normalized[CONF_SCHEDULE_HOME_START])
+        self.assertEqual("20:00:00", normalized[CONF_SCHEDULE_HOME_END])
 
     def test_schedule_window_validation_rejects_identical_values(self) -> None:
         self.assertFalse(validate_room_schedule_window("08:00:00", "08:00:00"))

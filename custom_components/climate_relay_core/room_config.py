@@ -150,5 +150,5 @@ def schedule_value(values: dict[str, Any], key: str, default: str) -> Any:
 
 
 def validate_room_schedule_window(start: str | None, end: str | None) -> bool:
-    """Return whether a room schedule has a non-empty window."""
+    """Preserve the Options Flow invariant that schedule endpoints differ."""
     return start != end

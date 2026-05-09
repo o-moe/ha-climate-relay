@@ -71,6 +71,18 @@ Runtime normalization happens in
 - `_resolve_profile_display_name(...)` prefers the HA area name, then legacy
   `name`, then the primary climate entity ID.
 
+After the room/profile normalization extraction,
+`custom_components/climate_relay_core/room_config.py` owns persisted or
+config-like room/profile normalization and pure validation. It must remain a
+framework-independent helper layer and must not import Home Assistant UI
+dependencies such as selectors, config entries, `voluptuous`, or Options Flow
+step logic.
+
+`custom_components/climate_relay_core/runtime.py` owns runtime object
+construction, active room configs, manual overrides, schedule-evaluation inputs,
+target-resolution support, and subscriber notification. These responsibilities
+must not be merged back into `room_config.py` during later refactoring.
+
 There is no durable, user-editable stable profile identifier in the persisted
 room options. `build_room_configs(...)` currently derives
 `RegulationProfileConfig.profile_id` from `slugify(primary_climate_entity_id)`.
@@ -424,6 +436,9 @@ Required room state:
   persistence and reloads runtime.
 - Existing implementation support: Options Flow schedule fields and runtime
   `_normalize_schedule(...)`.
+- Current extraction note: `validate_room_schedule_window(...)` preserves only
+  the existing Options Flow invariant that start and end must not be identical.
+  It is not a complete schedule validator.
 - Missing implementation work: reusable schedule validation and backend-owned
   schedule update operation independent of Options Flow.
 - Required tests: daily schedule start/end validation, identical schedule
@@ -441,7 +456,9 @@ Required room state:
 - Existing implementation support: partial normalization in runtime and UI schema
   constraints in Options Flow.
 - Missing implementation work: backend-owned validation function/action with
-  structured errors.
+  structured errors for valid time values, supported schedule layout,
+  continuity, non-overlap, minute-level boundaries, and future richer schedule
+  models.
 - Required tests: valid schedule normalization, invalid time values, identical
   schedule start/end rejection, unsupported schedule layout rejection.
 
