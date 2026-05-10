@@ -36,6 +36,7 @@ describe("climate-relay-card", () => {
     expect(rendered).toContain("optional_sensor_unavailable");
     expect(rendered).toContain("2026-05-10T22:00:00+02:00");
     expect(rendered).toContain("2026-05-10T19:30:00+02:00");
+    expect(rendered).toContain("Override 1h");
   });
 
   it("orchestrates existing backend override services without owning rule logic", async () => {
