@@ -741,6 +741,17 @@ async function waitForText(text) {{
   );
 }}
 
+async function waitForCardText(text) {{
+  await page.waitForFunction(
+    (expected) => {{
+      const card = document.querySelector("climate-relay-card");
+      return card?.shadowRoot?.innerText.includes(expected);
+    }},
+    text,
+    {{ timeout: 20000 }},
+  );
+}}
+
 async function setSchedule(labelSuffix, value) {{
   await page.evaluate(
     ([inputLabelSuffix, inputValue]) => {{
@@ -773,13 +784,13 @@ async function clickSave() {{
 
 await ensureLoggedIn();
 await mountCard();
-await waitForText("Climate Relay Acceptance");
-await waitForText("Schedule start");
-await waitForText("06:00:00");
+await waitForCardText("Climate Relay Acceptance");
+await waitForCardText("Schedule start");
+await waitForCardText("06:00:00");
 await setSchedule(" schedule start", "07:15");
 await setSchedule(" schedule end", "21:45");
 await clickSave();
-await waitForText("Schedule saved. Waiting for Home Assistant state to update.");
+await waitForCardText("Schedule saved. Waiting for Home Assistant state to update.");
 }}""".strip()
 
 
