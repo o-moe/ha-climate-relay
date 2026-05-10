@@ -27,6 +27,9 @@ subentries, a new persistence format, or an Options Flow UX expansion.
 - Quick override and resume buttons call the existing
   `climate_relay_core.set_area_override` and
   `climate_relay_core.clear_area_override` services.
+- The quick override button is explicitly labeled as `Override 1h` because the
+  current card uses a temporary fixed one-hour duration scaffold instead of a
+  complete override flow.
 
 ## Remaining backend-facing gaps
 
@@ -49,6 +52,11 @@ schedule editor or duplicating schedule validation in TypeScript.
 The card can set a one-hour duration override through the existing service. The
 backend does not yet expose per-room supported override capabilities or a
 structured active override object for frontend rendering.
+
+The existing override services currently accept an area ID, profile ID, or
+primary climate entity ID through the `area_id` service field. The card uses the
+room primary climate entity ID as a transitional room reference until a
+dedicated frontend-facing room action contract exists.
 
 ### Clear override / resume schedule
 
