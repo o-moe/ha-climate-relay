@@ -741,15 +741,15 @@ async function waitForText(text) {{
   );
 }}
 
-async function setSchedule(label, value) {{
+async function setSchedule(labelSuffix, value) {{
   await page.evaluate(
-    ([inputLabel, inputValue]) => {{
+    ([inputLabelSuffix, inputValue]) => {{
       const card = document.querySelector("climate-relay-card");
       const input = Array.from(card.shadowRoot.querySelectorAll("input")).find(
-        (candidate) => candidate.getAttribute("aria-label") === inputLabel,
+        (candidate) => candidate.getAttribute("aria-label")?.endsWith(inputLabelSuffix),
       );
       if (!input) {{
-        throw new Error(`Missing schedule input ${{inputLabel}}`);
+        throw new Error(`Missing schedule input ending with ${{inputLabelSuffix}}`);
       }}
       input.value = inputValue;
       input.dispatchEvent(new InputEvent("input", {{ bubbles: true, composed: true }}));
@@ -774,10 +774,10 @@ async function clickSave() {{
 await ensureLoggedIn();
 await mountCard();
 await waitForText("Climate Relay Acceptance");
-await waitForText("Office");
+await waitForText("Schedule start");
 await waitForText("06:00:00");
-await setSchedule("Office schedule start", "07:15");
-await setSchedule("Office schedule end", "21:45");
+await setSchedule(" schedule start", "07:15");
+await setSchedule(" schedule end", "21:45");
 await clickSave();
 await waitForText("Schedule saved. Waiting for Home Assistant state to update.");
 }}""".strip()
