@@ -9,6 +9,21 @@ implementation artifacts.
 
 ## UI surfaces
 
+### Increment 3.3 prototype card
+
+The first GUI vertical slice uses a minimal Lovelace custom card named
+`climate-relay-card` with Lovelace type `custom:climate-relay-card`.
+
+The card is a validation scaffold for the room overview. It reads activated
+room climate entities from Home Assistant state when they expose
+`primary_climate_entity_id` and renders backend-owned attributes. It may call
+existing backend services for quick override and resume actions, but it shall
+not evaluate rules, schedules, fallback state, or degraded-state semantics.
+
+Room activation and schedule editing remain visible gaps until backend-owned
+candidate discovery, activation, schedule validation, and schedule update
+operations exist.
+
 ### Room overview
 
 The room overview is the primary daily-use surface.

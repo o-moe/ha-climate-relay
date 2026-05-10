@@ -26,6 +26,13 @@ updating, or disabling one room/profile at a time. It does not add Home
 Assistant services, WebSocket APIs, config subentries, frontend APIs, or a new
 persistence format.
 
+Increment 3.3 starts the first GUI vertical slice with a minimal
+`climate-relay-card` prototype in `frontend/`. The card reads activated room
+climate entities from existing Home Assistant state and calls existing override
+services where available. It does not add a new backend API. The remaining
+backend-facing gaps discovered by the slice are tracked in
+[increment-3-3-gui-gaps.md](./increment-3-3-gui-gaps.md).
+
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.
 
@@ -540,6 +547,8 @@ Required room state:
 - Existing room/profile persistence under `rooms`.
 - Runtime `RegulationProfileConfig` for activated profiles.
 - One HA climate entity per activated profile.
+- Increment 3.3 custom card rendering of activated room climate entities from
+  existing backend-owned Home Assistant state.
 - Integration-wide global mode select entity.
 - Backend-owned rule priority, target resolution, schedule evaluation, manual
   override lifecycle, window override lifecycle, fallback behavior, and service

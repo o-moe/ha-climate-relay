@@ -3,12 +3,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "experimentalDecorators": true,
     "strict": true,
     "isolatedModules": true,
     "useDefineForClassFields": false,
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"],
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"]
 }
-

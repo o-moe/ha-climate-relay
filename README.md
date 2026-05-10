@@ -17,6 +17,8 @@ climate control.
 - manual overrides for configured area-bound regulation profiles through Home Assistant services
 - delayed open-window automation for configured area-bound regulation profiles
 - bounded multi-area runtime behavior when more than one profile is configured
+- an experimental `climate-relay-card` frontend scaffold for rendering
+  activated room tiles from backend-owned Home Assistant state
 - required primary-climate failure falls back to the configured fallback
   temperature and exposes `degradation_status = required_component_fallback`
 - optional verbose diagnostic logging
@@ -98,6 +100,11 @@ After a successful installation and setup, Home Assistant currently exposes:
   `climate_relay_core.set_area_override`, and
   `climate_relay_core.clear_area_override`
 
+The repository also contains an early custom-card scaffold in `frontend/`.
+It is intended for Increment 3.3 UX validation and later separation into a HACS
+dashboard/custom-card repository. It is not yet the final distributed dashboard
+package.
+
 ## How To Use It
 
 After setup, use the `Presence Control` select entity to control the current
@@ -153,8 +160,9 @@ suppressed as already applied.
   recomputed or cleared after restart; full durable runtime persistence is a
   later epic concern
 - schedule editing is limited to one daily home window
-- manual overrides are service/action based; a dedicated dashboard control is not available yet
-- a dedicated dashboard UI is not available yet
+- the experimental card can call the existing override services, but full
+  frontend action capability discovery is not available yet
+- room activation and schedule editing are not available in the custom card yet
 
 ## Additional Documentation
 

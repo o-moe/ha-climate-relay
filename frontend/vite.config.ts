@@ -5,7 +5,7 @@ export default defineConfig({
     lib: {
       entry: "src/index.ts",
       formats: ["es"],
-      fileName: () => "climate-relay-core-ui.js",
+      fileName: () => "climate-relay-card.js",
     },
     outDir: "dist",
     sourcemap: true,
