@@ -71,11 +71,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_command(command: list[str], *, env: dict[str, str], description: str) -> None:
+def _run_command(
+    command: list[str],
+    *,
+    env: dict[str, str],
+    description: str,
+    cwd: Path | None = None,
+) -> None:
     print(f"[acceptance] {description}")
     print(f"[acceptance] $ {' '.join(shlex.quote(part) for part in command)}")
     result = subprocess.run(
         command,
+        cwd=cwd,
         env=env,
         check=False,
         text=True,
@@ -1768,6 +1775,7 @@ def _run_epic_3(
         ["npm", "run", "build"],
         env=env,
         description="Build custom card bundle for GUI acceptance",
+        cwd=Path("frontend"),
     )
     card_bundle_path = (Path.cwd() / "frontend" / "dist" / "climate-relay-card.js").resolve()
     pw_env = _playwright_env()
