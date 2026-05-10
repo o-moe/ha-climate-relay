@@ -48,7 +48,9 @@ daily-window schedule model. The command accepts a transitional
 `schedule_home_end`, requires an admin user, validates the schedule in backend
 code, updates only those two fields on the matching room in the existing
 `rooms` options list, and relies on the existing config-entry update listener
-for reload.
+for reload. The command accepts only minute-level schedule values; `HH:MM` and
+`HH:MM:00` normalize to `HH:MM:00`, while non-zero seconds or microseconds are
+rejected as invalid schedule times.
 
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.

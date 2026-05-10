@@ -143,6 +143,40 @@ def _find_epic_2_room_entity(*, base_url: str, token: str) -> str:
     return room_entities["climate.virtual_climate_office"]
 
 
+def _find_room_entity_for_primary(
+    *,
+    base_url: str,
+    token: str,
+    primary_climate_entity_id: str,
+    timeout_seconds: float = 20.0,
+) -> str:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        states = _request_json(base_url=base_url, token=token, path="/api/states")
+        if not isinstance(states, list):
+            raise AcceptanceError("Expected /api/states to return a list.")
+        candidates = [
+            state
+            for state in states
+            if isinstance(state, dict)
+            and str(state.get("entity_id", "")).startswith("climate.")
+            and state.get("attributes", {}).get("primary_climate_entity_id")
+            == primary_climate_entity_id
+        ]
+        if len(candidates) == 1:
+            return str(candidates[0]["entity_id"])
+        if len(candidates) > 1:
+            raise AcceptanceError(
+                "Expected exactly one room climate entity for "
+                f"{primary_climate_entity_id}, found {len(candidates)}."
+            )
+        if time.monotonic() >= deadline:
+            raise AcceptanceError(
+                f"Timed out waiting for room climate entity for {primary_climate_entity_id}."
+            )
+        time.sleep(0.5)
+
+
 def _find_epic_2_room_entities(*, base_url: str, token: str) -> dict[str, str]:
     states = _request_json(base_url=base_url, token=token, path="/api/states")
     if not isinstance(states, list):
@@ -1659,7 +1693,11 @@ def _run_epic_3(
 
     print("[acceptance] Prepare Increment 3 schedule-editing profile through API")
     _prepare_epic_1_profile(base_url=base_url, token=token)
-    room_entity_id = _find_epic_2_room_entity(base_url=base_url, token=token)
+    room_entity_id = _find_room_entity_for_primary(
+        base_url=base_url,
+        token=token,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+    )
     _wait_for_room_attributes(
         base_url=base_url,
         token=token,

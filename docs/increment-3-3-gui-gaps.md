@@ -78,7 +78,9 @@ stable profile-ID migration.
 Increment 3.3b implements the minimal daily-window schedule editor. The backend
 validates required start/end values, rejects invalid time values, rejects
 identical start/end times, normalizes accepted values to ISO time strings with
-seconds, and preserves the existing flat `rooms` persistence shape.
+seconds, rejects non-zero seconds or microseconds, and preserves the existing
+flat `rooms` persistence shape. The accepted precision is minute-level:
+`HH:MM` and `HH:MM:00` are accepted and persisted as `HH:MM:00`.
 
 Still open: weekly schedules, multiple daily timeblocks, target-temperature
 configuration in the schedule editor, richer schedule previews, and reload
@@ -113,4 +115,6 @@ Increment 3 schedule-editing path (`--epic 3`) that reuses the existing HA
 preparation and Playwright mechanisms. It injects the built custom card into
 the HA frontend, edits schedule start/end through the GUI, and verifies the
 updated room state attributes through the HA API. It does not yet perform a
-config-entry reload/restart persistence check for the custom-card flow.
+config-entry reload/restart persistence check for the custom-card flow. The
+runner loads the ignored local `.env.local` file for `HOME_ASSISTANT_TOKEN`
+when the variable is not already exported.

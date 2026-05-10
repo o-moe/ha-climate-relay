@@ -515,7 +515,7 @@ class FrontendApiTests(IsolatedAsyncioTestCase):
             await async_update_room_schedule_from_frontend(
                 hass,
                 primary_climate_entity_id="climate.office",
-                schedule_home_start="invalid",
+                schedule_home_start="07:15:30",
                 schedule_home_end="20:00",
             )
         self.assertEqual(ERROR_INVALID_SCHEDULE_TIME, context.exception.code)

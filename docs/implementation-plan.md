@@ -347,6 +347,9 @@ room-management operations required by that GUI slice.
   `schedule_home_end`; the card renders both values, lets the user edit start
   and end time, and saves through the admin-only
   `climate_relay_core/update_room_schedule` WebSocket command.
+- Schedule precision: the backend accepts minute-level daily-window values
+  only. `HH:MM` and `HH:MM:00` normalize to persisted `HH:MM:00`; non-zero
+  seconds or microseconds are rejected.
 - Persistence/reload behavior: schedule updates replace only
   `schedule_home_start` and `schedule_home_end` on the referenced room inside
   the existing `rooms` options list, preserve unrelated room fields and other
@@ -366,7 +369,9 @@ room-management operations required by that GUI slice.
   preparation, API profile setup, and Playwright Chromium mechanisms. It builds
   and injects the custom card into the HA frontend, edits schedule start/end
   through the GUI, then verifies resulting HA room state attributes through
-  the HA API. Reload persistence is not covered yet by this runner.
+  the HA API. The runner loads ignored local `.env.local` values for
+  `HOME_ASSISTANT_TOKEN` when needed. Reload persistence is not covered yet by
+  this runner.
 
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 

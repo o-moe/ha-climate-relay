@@ -148,19 +148,21 @@ Expected coverage:
 - runtime behavior follows backend-owned schedule evaluation
 
 Increment 3.3b adds executable partial coverage for this target. Python tests
-cover backend-owned daily-window validation, structured WebSocket success and
-error handling, admin-only access, config-entry option persistence, preservation
-of unrelated room data, listener-owned reload behavior, and schedule start/end
-entity attributes. Vitest/jsdom tests cover rendering start/end attributes,
-save orchestration, backend error display, preservation of room tile rendering,
-and preservation of candidate discovery and activation behavior without
-TypeScript schedule evaluation.
+cover backend-owned minute-level daily-window validation, rejection of non-zero
+seconds or microseconds, structured WebSocket success and error handling,
+admin-only access, config-entry option persistence, preservation of unrelated
+room data, listener-owned reload behavior, and schedule start/end entity
+attributes. Vitest/jsdom tests cover rendering start/end attributes, save
+orchestration, backend error display, preservation of room tile rendering, and
+preservation of candidate discovery and activation behavior without TypeScript
+schedule evaluation.
 
 The existing HA acceptance runner has been extended with
 `uv run python scripts/run_epic_acceptance.py --epic 3`, which reuses the
 existing HA preparation/API/Playwright structure for a custom-card
-schedule-editing GUI path. Reload persistence remains an explicit acceptance
-gap for this custom-card flow.
+schedule-editing GUI path. The runner loads ignored local `.env.local` values
+for `HOME_ASSISTANT_TOKEN` when needed. Reload persistence remains an explicit
+acceptance gap for this custom-card flow.
 
 ### UX-AT-005 Quick override acceptance
 

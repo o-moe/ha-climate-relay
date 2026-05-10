@@ -112,10 +112,19 @@ class RoomConfigTest(TestCase):
     def test_daily_schedule_validation_accepts_valid_window(self) -> None:
         self.assertEqual(
             {
-                CONF_SCHEDULE_HOME_START: "06:30:00",
+                CONF_SCHEDULE_HOME_START: "07:15:00",
                 CONF_SCHEDULE_HOME_END: "22:00:00",
             },
-            normalize_daily_schedule_window("06:30", "22:00:00"),
+            normalize_daily_schedule_window("07:15", "22:00:00"),
+        )
+
+    def test_daily_schedule_validation_accepts_zero_second_precision(self) -> None:
+        self.assertEqual(
+            {
+                CONF_SCHEDULE_HOME_START: "07:15:00",
+                CONF_SCHEDULE_HOME_END: "22:00:00",
+            },
+            normalize_daily_schedule_window("07:15:00.000000", "22:00:00"),
         )
 
     def test_daily_schedule_validation_rejects_identical_start_and_end(self) -> None:
@@ -125,6 +134,14 @@ class RoomConfigTest(TestCase):
     def test_daily_schedule_validation_rejects_invalid_time_values(self) -> None:
         with self.assertRaises(InvalidScheduleTimeError):
             normalize_daily_schedule_window("25:00", "22:00")
+
+    def test_daily_schedule_validation_rejects_second_level_precision(self) -> None:
+        with self.assertRaises(InvalidScheduleTimeError):
+            normalize_daily_schedule_window("07:15:30", "22:00")
+
+    def test_daily_schedule_validation_rejects_non_zero_microsecond_precision(self) -> None:
+        with self.assertRaises(InvalidScheduleTimeError):
+            normalize_daily_schedule_window("07:15:00.000001", "22:00")
 
     def test_daily_schedule_validation_rejects_missing_window_endpoint(self) -> None:
         with self.assertRaises(ScheduleWindowRequiredError):

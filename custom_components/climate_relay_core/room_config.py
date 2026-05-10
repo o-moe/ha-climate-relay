@@ -185,6 +185,9 @@ def normalize_required_schedule_time(raw_value: Any) -> str:
     if value is None:
         raise ScheduleWindowRequiredError("Schedule start and end are required.")
     try:
-        return time.fromisoformat(value.strip()).isoformat()
+        parsed = time.fromisoformat(value.strip())
     except (TypeError, ValueError) as err:
         raise InvalidScheduleTimeError(f"Invalid schedule time: {raw_value!r}") from err
+    if parsed.second != 0 or parsed.microsecond != 0:
+        raise InvalidScheduleTimeError(f"Invalid schedule time precision: {raw_value!r}")
+    return parsed.isoformat()
