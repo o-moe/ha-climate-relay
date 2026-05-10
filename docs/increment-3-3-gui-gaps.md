@@ -7,8 +7,11 @@ Increment 3.3 starts the first GUI vertical slice with a minimal
 climate entities from backend-owned Home Assistant state and can call the
 existing backend override services.
 
-The slice deliberately does not add a broad backend API, a WebSocket API, config
-subentries, a new persistence format, or an Options Flow UX expansion.
+Increment 3.3a extends that slice with the smallest frontend-facing backend
+contract needed to activate one room from the card. It adds narrow WebSocket
+commands for candidate discovery and one-room activation, while still avoiding
+a broad backend API, config subentries, a new persistence format, or an Options
+Flow UX expansion.
 
 ## Implemented frontend slice
 
@@ -30,16 +33,25 @@ subentries, a new persistence format, or an Options Flow UX expansion.
 - The quick override button is explicitly labeled as `Override 1h` because the
   current card uses a temporary fixed one-hour duration scaffold instead of a
   complete override flow.
+- Candidate discovery uses the `climate_relay_core/room_candidates` WebSocket
+  command and returns area/climate candidates with backend-owned availability
+  reasons.
+- Room activation uses the `climate_relay_core/activate_room` WebSocket command
+  and persists exactly one activated room through the existing `rooms` options
+  shape.
 
 ## Remaining backend-facing gaps
 
 ### Room activation
 
-The frontend still lacks backend-owned candidate discovery and a
-frontend-callable activation operation. The existing `room_management.py`
-helpers operate on the existing `rooms` option shape, but no Home Assistant
-frontend-facing operation lists eligible areas/climate candidates or persists an
-activated room from the custom card.
+Increment 3.3a implements the first activation path. The backend lists climate
+candidates from Home Assistant state/entity registry context, marks missing
+areas, duplicate primary climates, and duplicate HA areas as unavailable, and
+activates one eligible primary climate through `room_management.activate_room`.
+
+Still open: richer room configuration after activation, optional humidity/window
+selection, target-temperature configuration, room disable/update operations, and
+stable profile-ID migration.
 
 ### Schedule editing
 
@@ -67,6 +79,10 @@ relevant as a room capability or action state.
 ## Follow-up boundary
 
 The next backend work should implement only the missing frontend-facing
-operations discovered by this slice: candidate discovery, room activation,
-schedule validation/update, and action capability projection. It should not
-return to broad backend-only room-management abstraction.
+operations discovered by this slice: schedule validation/update, minimal
+schedule editing, action capability projection, room update, and room disable.
+It should not return to broad backend-only room-management abstraction.
+
+Real Home Assistant / Playwright end-to-end acceptance for the custom card is
+still missing. Current evidence is Python backend tests plus Vitest/jsdom
+frontend tests against mocked Home Assistant objects.

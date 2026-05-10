@@ -118,9 +118,17 @@ Expected coverage:
 - room disable flow
 - persistence after reload
 
-Increment 3.3 documents this as a backend-facing gap because the frontend does
-not yet have candidate discovery or a frontend-callable room activation
-operation.
+Increment 3.3a adds executable partial coverage for this target. Python backend
+tests cover candidate discovery, missing-area rejection, duplicate primary
+climate rejection, duplicate HA-area rejection, one-room activation, use of
+`room_management.activate_room(...)`, and config-entry options persistence.
+Vitest/jsdom tests cover rendering the candidate section, unavailable reasons,
+activation WebSocket orchestration, activation errors, and preservation of room
+tile rendering.
+
+Still missing: real Home Assistant / Playwright end-to-end acceptance,
+optional sensor configuration, room update/disable, target configuration,
+schedule editing, and persistence verification through a running HA instance.
 
 ### UX-AT-004 Schedule editor acceptance
 
@@ -139,6 +147,8 @@ Expected coverage:
 
 Increment 3.3 documents this as a backend-facing gap because the frontend does
 not yet have backend-owned schedule validation or schedule update operations.
+Increment 3.3a keeps this gap open and does not add frontend-owned schedule
+validation.
 
 ### UX-AT-005 Quick override acceptance
 
@@ -158,6 +168,8 @@ Increment 3.3 covers only the initial executable scaffold: the card can call
 the existing backend set/clear override services and the frontend test verifies
 that orchestration. Full capability discovery and runtime effect coverage remain
 open.
+Increment 3.3a does not change this: `Override 1h` remains a temporary fixed
+duration scaffold, and action capability projection remains open.
 
 ### UX-AT-006 Global mode acceptance
 

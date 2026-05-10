@@ -1,11 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+import { activateRoom, fetchRoomCandidates } from "./backend-api";
 import { extractClimateRelayRooms } from "./room-state";
 import type {
   ClimateRelayCardConfig,
   ClimateRelayRoomTile,
   HomeAssistantLike,
+  RoomCandidate,
 } from "./types";
 
 @customElement("climate-relay-card")
@@ -13,6 +15,12 @@ export class ClimateRelayCard extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistantLike;
   @state() private _config: ClimateRelayCardConfig = {};
   @state() private _overrideTargets: Record<string, string> = {};
+  @state() private _candidates: RoomCandidate[] = [];
+  @state() private _candidateError?: string;
+  @state() private _candidateLoading = false;
+  @state() private _activatingCandidateId?: string;
+  @state() private _activationMessage?: string;
+  private _candidateHass?: HomeAssistantLike;
 
   public setConfig(config: ClimateRelayCardConfig): void {
     this._config = config ?? {};
@@ -59,7 +67,8 @@ export class ClimateRelayCard extends LitElement {
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     }
 
-    .room-tile {
+    .room-tile,
+    .candidate {
       border: 1px solid var(--divider-color, #d8dee4);
       border-radius: 8px;
       display: grid;
@@ -68,7 +77,8 @@ export class ClimateRelayCard extends LitElement {
       padding: 14px;
     }
 
-    .tile-header {
+    .tile-header,
+    .candidate-header {
       align-items: start;
       display: flex;
       gap: 12px;
@@ -93,6 +103,36 @@ export class ClimateRelayCard extends LitElement {
       max-width: 46%;
       overflow-wrap: anywhere;
       padding: 5px 8px;
+    }
+
+    .candidate-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .candidate-name {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .candidate-meta,
+    .message {
+      color: var(--secondary-text-color, #52616f);
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .message.error {
+      color: var(--error-color, #b00020);
     }
 
     dl {
@@ -149,6 +189,11 @@ export class ClimateRelayCard extends LitElement {
       color: var(--primary-text-color, #1f2933);
     }
 
+    button:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
     .gaps {
       color: var(--secondary-text-color, #52616f);
       display: grid;
@@ -168,8 +213,16 @@ export class ClimateRelayCard extends LitElement {
       ${rooms.length === 0
         ? html`<div class="status">No Climate Relay entities found</div>`
         : html`<section class="rooms">${rooms.map((room) => this._renderRoom(room))}</section>`}
+      ${this._renderCandidateSection()}
       ${this._renderGaps()}
     `);
+  }
+
+  protected willUpdate(changedProperties: Map<string, unknown>): void {
+    if (changedProperties.has("hass") && this.hass && this.hass !== this._candidateHass) {
+      this._candidateHass = this.hass;
+      void this._loadCandidates();
+    }
   }
 
   private _renderShell(content: unknown) {
@@ -223,6 +276,48 @@ export class ClimateRelayCard extends LitElement {
     return html`<dt>${label}</dt><dd>${value}</dd>`;
   }
 
+  private _renderCandidateSection() {
+    const activatableCandidates = this._candidates.filter(
+      (candidate) => !candidate.already_active,
+    );
+    if (!this._candidateLoading && activatableCandidates.length === 0 && !this._candidateError) {
+      return nothing;
+    }
+
+    return html`
+      <section class="candidate-list" aria-label="Add room">
+        <h3 class="section-title">Add room</h3>
+        ${this._candidateLoading ? html`<div class="message">Loading room candidates</div>` : nothing}
+        ${this._candidateError ? html`<div class="message error">${this._candidateError}</div>` : nothing}
+        ${this._activationMessage ? html`<div class="message">${this._activationMessage}</div>` : nothing}
+        ${activatableCandidates.map((candidate) => this._renderCandidate(candidate))}
+      </section>
+    `;
+  }
+
+  private _renderCandidate(candidate: RoomCandidate) {
+    const disabled = Boolean(candidate.unavailable_reason) || Boolean(this._activatingCandidateId);
+    return html`
+      <article class="candidate">
+        <div class="candidate-header">
+          <div>
+            <div class="candidate-name">${candidate.area_name ?? candidate.primary_climate_display_name ?? candidate.primary_climate_entity_id}</div>
+            <div class="candidate-meta">${candidate.primary_climate_display_name ?? candidate.primary_climate_entity_id}</div>
+          </div>
+          <button
+            ?disabled=${disabled}
+            @click=${() => this._activateCandidate(candidate)}
+          >
+            ${this._activatingCandidateId === candidate.candidate_id ? "Activating" : "Activate"}
+          </button>
+        </div>
+        ${candidate.unavailable_reason
+          ? html`<div class="message error">${formatUnavailableReason(candidate.unavailable_reason)}</div>`
+          : nothing}
+      </article>
+    `;
+  }
+
   private _renderGaps() {
     return html`
       <section class="gaps" aria-label="Climate Relay frontend contract gaps">
@@ -265,6 +360,40 @@ export class ClimateRelayCard extends LitElement {
       area_id: roomReference,
     });
   }
+
+  private async _loadCandidates(): Promise<void> {
+    if (!this.hass?.connection) {
+      return;
+    }
+    this._candidateLoading = true;
+    this._candidateError = undefined;
+    try {
+      const result = await fetchRoomCandidates(this.hass);
+      this._candidates = result.candidates;
+    } catch (error) {
+      this._candidateError = errorMessage(error);
+    } finally {
+      this._candidateLoading = false;
+    }
+  }
+
+  private async _activateCandidate(candidate: RoomCandidate): Promise<void> {
+    if (!this.hass?.connection || candidate.unavailable_reason) {
+      return;
+    }
+    this._activatingCandidateId = candidate.candidate_id;
+    this._activationMessage = undefined;
+    this._candidateError = undefined;
+    try {
+      await activateRoom(this.hass, candidate.candidate_id);
+      this._activationMessage = "Room activated. Waiting for Home Assistant state to update.";
+      await this._loadCandidates();
+    } catch (error) {
+      this._candidateError = errorMessage(error);
+    } finally {
+      this._activatingCandidateId = undefined;
+    }
+  }
 }
 
 function formatTemperature(value: number | undefined): string | undefined {
@@ -273,6 +402,30 @@ function formatTemperature(value: number | undefined): string | undefined {
 
 function formatNumber(value: number | undefined): string | undefined {
   return value === undefined ? undefined : value.toFixed(1);
+}
+
+function formatUnavailableReason(reason: string): string {
+  const labels: Record<string, string> = {
+    duplicate_area: "Area is already active.",
+    duplicate_primary_climate: "Climate entity is already active.",
+    missing_area: "Climate entity has no Home Assistant area.",
+  };
+  return labels[reason] ?? reason;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "Climate Relay backend request failed.";
 }
 
 declare global {
