@@ -118,3 +118,6 @@ updated room state attributes through the HA API. It does not yet perform a
 config-entry reload/restart persistence check for the custom-card flow. The
 runner loads the ignored local `.env.local` file for `HOME_ASSISTANT_TOKEN`
 when the variable is not already exported.
+
+The schedule-editing path passed locally on 2026-05-10 against
+`v0.2.0-alpha.37` on the dedicated HA test instance.

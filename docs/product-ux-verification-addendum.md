@@ -128,9 +128,10 @@ Vitest/jsdom tests cover rendering the candidate section, unavailable reasons,
 activation WebSocket orchestration, activation errors, and preservation of room
 tile rendering.
 
-Still missing: real Home Assistant / Playwright end-to-end acceptance,
-optional sensor configuration, room update/disable, target configuration,
-schedule editing, and persistence verification through a running HA instance.
+Still missing for the broader room-configuration surface: optional sensor
+configuration, room update/disable, target configuration, and full persistence
+verification through a running HA instance. The initial daily-window schedule
+editing path is covered separately by `UX-AT-004`.
 
 ### UX-AT-004 Schedule editor acceptance
 
@@ -163,6 +164,13 @@ existing HA preparation/API/Playwright structure for a custom-card
 schedule-editing GUI path. The runner loads ignored local `.env.local` values
 for `HOME_ASSISTANT_TOKEN` when needed. Reload persistence remains an explicit
 acceptance gap for this custom-card flow.
+
+Local acceptance passed on 2026-05-10 against `v0.2.0-alpha.37` on the
+dedicated HA test instance. The run installed the alpha pre-release, restarted
+Home Assistant, performed the authenticated API smoke test, built and injected
+the custom card, edited schedule start/end through the GUI, and verified the
+updated `schedule_home_start` / `schedule_home_end` room attributes through the
+HA API.
 
 ### UX-AT-005 Quick override acceptance
 

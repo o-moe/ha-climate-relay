@@ -370,8 +370,9 @@ room-management operations required by that GUI slice.
   and injects the custom card into the HA frontend, edits schedule start/end
   through the GUI, then verifies resulting HA room state attributes through
   the HA API. The runner loads ignored local `.env.local` values for
-  `HOME_ASSISTANT_TOKEN` when needed. Reload persistence is not covered yet by
-  this runner.
+  `HOME_ASSISTANT_TOKEN` when needed. Local acceptance passed on 2026-05-10
+  against `v0.2.0-alpha.37` on the dedicated HA test instance. Reload
+  persistence is not covered yet by this runner.
 
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 
