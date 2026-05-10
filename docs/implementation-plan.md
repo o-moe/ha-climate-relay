@@ -12,7 +12,8 @@ This document derives a prioritized implementation plan from the reviewed SRS in
 [engineering-standards.md](./engineering-standards.md),
 [product-ux-vision.md](./product-ux-vision.md),
 [frontend-interaction-model.md](./frontend-interaction-model.md),
-[frontend-backend-contract.md](./frontend-backend-contract.md), and
+[frontend-backend-contract.md](./frontend-backend-contract.md),
+[frontend-repository-strategy.md](./frontend-repository-strategy.md), and
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 The plan is intentionally backend-first and uses the current implementation
@@ -284,23 +285,29 @@ room-management operations required by that GUI slice.
 
 ### Increment 3.3: First GUI vertical slice
 
+- Status: started by the current branch work.
 - Scope: deliver the first custom card / dashboard frontend slice that validates
   the room-first UX early. This slice validates daily-use behavior; it is not
   the final frontend.
-- Required flow: list eligible Home Assistant areas and climate candidates;
+- Current slice: render activated rooms as room tiles from backend-owned Home
+  Assistant climate entity state; show effective target, active control
+  context, degradation, next change, and override end; expose quick override
+  and resume actions through existing backend services; document missing
+  backend-facing activation and schedule-editing operations.
+- Full target flow: list eligible Home Assistant areas and climate candidates;
   activate one room through a backend-owned operation; show the activated room
-  as a room tile; show effective target and active control context; edit the
-  initially supported daily schedule model; set a quick manual override; clear
-  override / resume schedule.
+  as a room tile; edit the initially supported daily schedule model; set a
+  quick manual override; clear override / resume schedule.
 - Constraints: backend remains the source of truth; the frontend does not own
   rule evaluation, schedule evaluation, fallback semantics, degraded-state
   semantics, or persistence semantics.
-- Verification focus: executable frontend acceptance for the single-room
-  vertical path plus backend/frontend integration evidence for state, schedule
-  update, override, clear override, and persistence.
-- Exit criteria: a product owner can complete the first room activation and
-  daily-use control loop from the GUI without Developer Tools, raw attributes,
-  or direct config-entry mutation.
+- Verification focus: executable frontend acceptance for room tile rendering
+  and action orchestration; backend/frontend integration evidence for state,
+  schedule update, override, clear override, and persistence remains required
+  before the full target flow is complete.
+- Exit criteria: a product owner can validate the room-first tile experience
+  from the GUI without Developer Tools or raw attribute inspection, with
+  remaining backend-facing gaps explicitly documented.
 
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 

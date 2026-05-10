@@ -80,6 +80,13 @@ Expected coverage:
 - active override end is visible when applicable
 - window, humidity, and degradation indicators are visible when applicable
 
+Increment 3.3 adds an executable frontend scaffold for the first part of this
+acceptance target: `npm run test` in `frontend/` renders
+`climate-relay-card` with a mocked Home Assistant `hass` object, verifies the
+empty state, verifies one activated room tile, and verifies that room name,
+target temperature, active control context, and degradation status are visible
+without raw entity attribute inspection.
+
 ### UX-AT-002 Room detail reason-chain acceptance
 
 Verifies that the frontend room detail explains why the current room target is
@@ -111,6 +118,10 @@ Expected coverage:
 - room disable flow
 - persistence after reload
 
+Increment 3.3 documents this as a backend-facing gap because the frontend does
+not yet have candidate discovery or a frontend-callable room activation
+operation.
+
 ### UX-AT-004 Schedule editor acceptance
 
 Verifies that the first frontend slice includes room schedule editing for the
@@ -126,6 +137,9 @@ Expected coverage:
 - room overview or room detail shows the resulting next scheduled change
 - runtime behavior follows backend-owned schedule evaluation
 
+Increment 3.3 documents this as a backend-facing gap because the frontend does
+not yet have backend-owned schedule validation or schedule update operations.
+
 ### UX-AT-005 Quick override acceptance
 
 Verifies frontend creation and clearing of manual room overrides.
@@ -139,6 +153,11 @@ Expected coverage:
 - persistent override until cleared
 - clear override / resume schedule
 - room tile reflects active override without raw attribute inspection
+
+Increment 3.3 covers only the initial executable scaffold: the card can call
+the existing backend set/clear override services and the frontend test verifies
+that orchestration. Full capability discovery and runtime effect coverage remain
+open.
 
 ### UX-AT-006 Global mode acceptance
 
