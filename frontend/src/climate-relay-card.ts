@@ -209,7 +209,7 @@ export class ClimateRelayCard extends LitElement {
             ""}
             @input=${(event: InputEvent) => this._updateOverrideTarget(room, event)}
           />
-          <button @click=${() => this._setOverride(room)}>Override</button>
+          <button @click=${() => this._setOverride(room)}>Override 1h</button>
           <button class="secondary" @click=${() => this._clearOverride(room)}>Resume</button>
         </div>
       </article>
@@ -228,7 +228,7 @@ export class ClimateRelayCard extends LitElement {
       <section class="gaps" aria-label="Climate Relay frontend contract gaps">
         <div>Room activation needs backend candidate discovery and a frontend-callable activation operation.</div>
         <div>Schedule editing needs backend-owned schedule validation and update operations.</div>
-        <div>Override controls use existing backend services; supported action capabilities are not yet exposed as room state.</div>
+        <div>Override 1h is a temporary fixed-duration scaffold that uses existing backend services; supported action capabilities are not yet exposed as room state.</div>
       </section>
     `;
   }
@@ -247,8 +247,9 @@ export class ClimateRelayCard extends LitElement {
     if (!this.hass?.callService || !Number.isFinite(targetTemperature)) {
       return;
     }
+    const roomReference = room.primaryClimateEntityId;
     await this.hass.callService("climate_relay_core", "set_area_override", {
-      area_id: room.primaryClimateEntityId,
+      area_id: roomReference,
       target_temperature: targetTemperature,
       termination_type: "duration",
       duration_minutes: 60,
@@ -259,8 +260,9 @@ export class ClimateRelayCard extends LitElement {
     if (!this.hass?.callService) {
       return;
     }
+    const roomReference = room.primaryClimateEntityId;
     await this.hass.callService("climate_relay_core", "clear_area_override", {
-      area_id: room.primaryClimateEntityId,
+      area_id: roomReference,
     });
   }
 }
