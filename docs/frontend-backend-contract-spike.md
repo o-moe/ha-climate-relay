@@ -33,6 +33,15 @@ services where available. It does not add a new backend API. The remaining
 backend-facing gaps discovered by the slice are tracked in
 [increment-3-3-gui-gaps.md](./increment-3-3-gui-gaps.md).
 
+Increment 3.3a adds the first narrow frontend-facing backend operations:
+`climate_relay_core/room_candidates` and `climate_relay_core/activate_room`
+WebSocket commands. These commands are scoped to candidate discovery and
+activating exactly one room from the custom card. They keep the existing
+`rooms` persistence format and do not introduce config subentries or a broad
+backend API. Both commands require a Home Assistant admin user because they
+support room configuration; activation also mutates persistent config entry
+options.
+
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.
 
@@ -390,8 +399,15 @@ Required room state:
   candidates if included in the first backend operation.
 - Existing implementation support: Options Flow selectors and
   `_resolve_area_reference(...)` derive area context.
-- Missing implementation work: no backend operation currently lists candidates;
-  duplicate checks are Options-Flow-coupled.
+- Increment 3.3a implementation: `climate_relay_core/room_candidates` returns
+  `candidate_id`, `area_id`, `area_name`, `primary_climate_entity_id`,
+  `primary_climate_display_name`, `already_active`, and
+  `unavailable_reason`. The command excludes Climate Relay's own virtual room
+  climate entities from candidates by ignoring state-machine climate entities
+  that expose `primary_climate_entity_id` and registry entries owned by the
+  `climate_relay_core` platform.
+- Remaining implementation work: optional humidity/window candidates, editing
+  context, and a complete room-state provider remain open.
 - Required tests: primary climate missing area, duplicate primary climate,
   duplicate HA area, candidate exclusion/inclusion while editing an existing
   room, optional sensor/window candidates.
@@ -399,8 +415,9 @@ Required room state:
 ### Activate room
 
 - Purpose: create a room/profile from an eligible HA area and primary climate.
-- Input: primary climate entity ID, optional humidity entity ID, optional window
-  entity ID, window behavior, target temperatures, daily schedule.
+- Input: primary climate entity ID or candidate ID for Increment 3.3a. Optional
+  humidity entity ID, optional window entity ID, window behavior, target
+  temperatures, and daily schedule remain future room-configuration inputs.
 - Validation responsibility: backend validates required primary climate, HA area
   resolution, duplicates, targets, schedule, optional sensors, and window
   behavior.
@@ -408,9 +425,14 @@ Required room state:
   using the same persistence format.
 - Existing implementation support: Options Flow add-profile path persists this
   data.
-- Missing implementation work: no backend-owned non-Options-Flow operation.
+- Increment 3.3a implementation: `climate_relay_core/activate_room` validates
+  the selected candidate, builds a default room payload, calls
+  `room_management.activate_room(...)`, persists updated config entry options
+  through Home Assistant's config-entry update path, and relies on the existing
+  config-entry update listener to reload runtime/entities.
 - Required tests: activation validation, primary climate missing area, duplicate
-  primary climate, duplicate HA area, defaults, persistence and reload.
+  primary climate, duplicate HA area, defaults, persistence, and update-listener
+  reload behavior.
 
 ### Update room configuration
 
@@ -549,6 +571,8 @@ Required room state:
 - One HA climate entity per activated profile.
 - Increment 3.3 custom card rendering of activated room climate entities from
   existing backend-owned Home Assistant state.
+- Increment 3.3a WebSocket candidate discovery and one-room activation from the
+  custom card.
 - Integration-wide global mode select entity.
 - Backend-owned rule priority, target resolution, schedule evaluation, manual
   override lifecycle, window override lifecycle, fallback behavior, and service
@@ -559,7 +583,8 @@ Required room state:
 
 ### Implemented but Options-Flow-coupled
 
-- Room activation.
+- Room activation through the Options Flow and the Increment 3.3a WebSocket
+  command.
 - Room configuration update.
 - Room removal/disable.
 - Candidate selection through HA selectors.
@@ -614,8 +639,6 @@ exist when needed, but they should be named and scoped as adapter helpers.
 ### Missing backend operation
 
 - List activated rooms.
-- List eligible HA areas/climate candidates.
-- Activate room outside Options Flow.
 - Update room configuration outside Options Flow.
 - Disable room outside Options Flow.
 - Update room schedule outside Options Flow.

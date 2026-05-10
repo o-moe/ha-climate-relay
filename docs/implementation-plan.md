@@ -285,7 +285,8 @@ room-management operations required by that GUI slice.
 
 ### Increment 3.3: First GUI vertical slice
 
-- Status: started by the current branch work.
+- Status: completed as the first room-tile rendering slice; extended by
+  Increment 3.3a for GUI room activation.
 - Scope: deliver the first custom card / dashboard frontend slice that validates
   the room-first UX early. This slice validates daily-use behavior; it is not
   the final frontend.
@@ -308,6 +309,35 @@ room-management operations required by that GUI slice.
 - Exit criteria: a product owner can validate the room-first tile experience
   from the GUI without Developer Tools or raw attribute inspection, with
   remaining backend-facing gaps explicitly documented.
+
+### Increment 3.3a: Candidate discovery and GUI room activation
+
+- Scope: add narrow frontend-facing WebSocket commands for room candidate
+  discovery and activation of exactly one room from the custom card.
+- Implemented flow: the backend lists climate candidates with HA area metadata,
+  marks already-active, missing-area, duplicate-primary, and duplicate-area
+  candidates as unavailable, and activates one eligible candidate through the
+  existing `rooms` options format and `room_management.activate_room(...)`.
+  Candidate discovery excludes Climate Relay's own virtual room climate
+  entities. Candidate discovery and activation WebSocket commands are
+  admin-only.
+- Persistence/reload behavior: activation updates config entry options through
+  Home Assistant's update mechanism and relies on the existing config-entry
+  update listener to reload runtime/entities.
+- Frontend behavior: the card renders an `Add room` section, shows unavailable
+  reasons, calls the activation command, and shows a waiting-for-state-update
+  success message until Home Assistant exposes the new room entity.
+- Non-scope: no schedule editor, no schedule update operation, no optional
+  sensor setup, no target-temperature setup, no config subentries, no stable
+  profile-ID migration, no Options Flow UX expansion, and no frontend-owned
+  rule or schedule evaluation.
+- Verification focus: backend unit tests for candidate discovery, own-entity
+  exclusion, admin-only WebSocket commands, activation, duplicate rejection,
+  config-entry update, listener-owned reload behavior, and room-management
+  reuse; Vitest/jsdom tests for candidate rendering, activation orchestration,
+  activation errors, and preservation of existing room tile rendering.
+- Remaining acceptance gap: real Home Assistant / Playwright end-to-end
+  acceptance for the custom card is still not present.
 
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 

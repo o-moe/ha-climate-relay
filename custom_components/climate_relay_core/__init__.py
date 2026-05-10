@@ -18,6 +18,7 @@ from .const import (
     SERVICE_SET_GLOBAL_MODE,
 )
 from .domain import GlobalMode, OverrideTerminationType
+from .frontend_api import async_register_websocket_commands
 from .runtime import GlobalRuntime, build_global_config, build_room_configs
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the integration domain."""
     hass.data.setdefault(DOMAIN, {})
+    async_register_websocket_commands(hass)
     return True
 
 

@@ -20,9 +20,15 @@ room climate entities from Home Assistant state when they expose
 existing backend services for quick override and resume actions, but it shall
 not evaluate rules, schedules, fallback state, or degraded-state semantics.
 
-Room activation and schedule editing remain visible gaps until backend-owned
-candidate discovery, activation, schedule validation, and schedule update
-operations exist.
+Increment 3.3a adds the first room activation flow to this prototype. The card
+loads backend-owned room candidates through WebSocket, renders an `Add room`
+section, activates one eligible candidate through a backend-owned operation,
+and then waits for Home Assistant state to expose the new room tile.
+
+Schedule editing remains a visible gap until backend-owned schedule validation
+and schedule update operations exist. Action capability projection also remains
+open; the quick override control is still a fixed one-hour scaffold over the
+existing services.
 
 ### Room overview
 
@@ -82,6 +88,10 @@ Room management shall allow users to:
 
 Room management belongs to the custom frontend. The Home Assistant options flow
 may temporarily provide equivalent configuration only as bootstrap scaffolding.
+
+The Increment 3.3a room-management subset supports only activation of one
+eligible primary climate candidate with backend defaults. It intentionally does
+not configure optional sensors, window behavior, targets, or schedules.
 
 ### Schedule editing
 

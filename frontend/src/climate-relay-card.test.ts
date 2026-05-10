@@ -15,7 +15,7 @@ describe("climate-relay-card", () => {
 
   it("renders empty state with a mocked Home Assistant object", async () => {
     const element = createCard();
-    element.hass = { states: {} };
+    element.hass = { ...mockHass(), states: {} };
 
     await element.updateComplete;
 
@@ -39,6 +39,119 @@ describe("climate-relay-card", () => {
     expect(rendered).toContain("Override 1h");
   });
 
+  it("renders candidate section when backend returns candidates", async () => {
+    const sendMessagePromise = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          candidate_id: "climate.bedroom",
+          area_id: "bedroom",
+          area_name: "Bedroom",
+          primary_climate_entity_id: "climate.bedroom",
+          primary_climate_display_name: "Bedroom Thermostat",
+          already_active: false,
+          unavailable_reason: null,
+        },
+      ],
+    });
+    const element = createCard();
+    element.hass = mockHass(undefined, sendMessagePromise);
+
+    await waitForUpdates(element);
+
+    const rendered = textContent(element);
+    expect(rendered).toContain("Add room");
+    expect(rendered).toContain("Bedroom");
+    expect(rendered).toContain("Bedroom Thermostat");
+    expect(rendered).toContain("Activate");
+  });
+
+  it("shows unavailable reason for non-activatable candidate", async () => {
+    const sendMessagePromise = vi.fn().mockResolvedValue({
+      candidates: [
+        {
+          candidate_id: "climate.no_area",
+          area_id: null,
+          area_name: null,
+          primary_climate_entity_id: "climate.no_area",
+          primary_climate_display_name: "Loose Thermostat",
+          already_active: false,
+          unavailable_reason: "missing_area",
+        },
+      ],
+    });
+    const element = createCard();
+    element.hass = { ...mockHass(undefined, sendMessagePromise), states: {} };
+
+    await waitForUpdates(element);
+
+    expect(textContent(element)).toContain("Climate entity has no Home Assistant area.");
+  });
+
+  it("calls backend activation operation when user clicks Activate", async () => {
+    const sendMessagePromise = vi
+      .fn()
+      .mockResolvedValueOnce({
+        candidates: [
+          {
+            candidate_id: "climate.bedroom",
+            area_id: "bedroom",
+            area_name: "Bedroom",
+            primary_climate_entity_id: "climate.bedroom",
+            primary_climate_display_name: "Bedroom Thermostat",
+            already_active: false,
+            unavailable_reason: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ activated: true })
+      .mockResolvedValueOnce({ candidates: [] });
+    const element = createCard();
+    element.hass = { ...mockHass(undefined, sendMessagePromise), states: {} };
+
+    await waitForUpdates(element);
+    const activateButton = Array.from(element.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("Activate"),
+    );
+    activateButton?.dispatchEvent(new MouseEvent("click"));
+    await waitForUpdates(element);
+
+    expect(sendMessagePromise).toHaveBeenCalledWith({
+      type: "climate_relay_core/activate_room",
+      candidate_id: "climate.bedroom",
+    });
+    expect(textContent(element)).toContain("Waiting for Home Assistant state to update.");
+  });
+
+  it("shows activation error if backend rejects the command", async () => {
+    const sendMessagePromise = vi
+      .fn()
+      .mockResolvedValueOnce({
+        candidates: [
+          {
+            candidate_id: "climate.bedroom",
+            area_id: "bedroom",
+            area_name: "Bedroom",
+            primary_climate_entity_id: "climate.bedroom",
+            primary_climate_display_name: "Bedroom Thermostat",
+            already_active: false,
+            unavailable_reason: null,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("Home Assistant area is already activated."));
+    const element = createCard();
+    element.hass = { ...mockHass(undefined, sendMessagePromise), states: {} };
+
+    await waitForUpdates(element);
+    const activateButton = Array.from(element.shadowRoot?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.includes("Activate"),
+    );
+    activateButton?.dispatchEvent(new MouseEvent("click"));
+    await waitForUpdates(element);
+
+    expect(textContent(element)).toContain("Home Assistant area is already activated.");
+  });
+
   it("orchestrates existing backend override services without owning rule logic", async () => {
     const callService = vi.fn();
     const element = createCard();
@@ -59,6 +172,18 @@ describe("climate-relay-card", () => {
       area_id: "climate.office",
     });
   });
+
+  it("documents that schedule validation stays backend-owned and unimplemented here", async () => {
+    const element = createCard();
+    element.hass = mockHass();
+
+    await waitForUpdates(element);
+
+    const rendered = textContent(element);
+    expect(rendered).toContain("Room activation is available for eligible primary climate candidates");
+    expect(rendered).toContain("Schedule editing needs backend-owned schedule validation");
+    expect(rendered).toContain("Override 1h remains a temporary fixed-duration scaffold");
+  });
 });
 
 function createCard(): ClimateRelayCard {
@@ -68,9 +193,15 @@ function createCard(): ClimateRelayCard {
   return element;
 }
 
-function mockHass(callService = vi.fn()): HomeAssistantLike {
+function mockHass(
+  callService = vi.fn(),
+  sendMessagePromise = vi.fn().mockResolvedValue({ candidates: [] }),
+): HomeAssistantLike {
   return {
     callService,
+    connection: {
+      sendMessagePromise,
+    },
     states: {
       "climate.climate_relay_office": {
         entity_id: "climate.climate_relay_office",
@@ -92,4 +223,10 @@ function mockHass(callService = vi.fn()): HomeAssistantLike {
 
 function textContent(element: Element): string {
   return element.shadowRoot?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+async function waitForUpdates(element: ClimateRelayCard): Promise<void> {
+  await element.updateComplete;
+  await Promise.resolve();
+  await element.updateComplete;
 }
