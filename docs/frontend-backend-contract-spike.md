@@ -38,7 +38,9 @@ Increment 3.3a adds the first narrow frontend-facing backend operations:
 WebSocket commands. These commands are scoped to candidate discovery and
 activating exactly one room from the custom card. They keep the existing
 `rooms` persistence format and do not introduce config subentries or a broad
-backend API.
+backend API. Both commands require a Home Assistant admin user because they
+support room configuration; activation also mutates persistent config entry
+options.
 
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.
@@ -400,7 +402,10 @@ Required room state:
 - Increment 3.3a implementation: `climate_relay_core/room_candidates` returns
   `candidate_id`, `area_id`, `area_name`, `primary_climate_entity_id`,
   `primary_climate_display_name`, `already_active`, and
-  `unavailable_reason`.
+  `unavailable_reason`. The command excludes Climate Relay's own virtual room
+  climate entities from candidates by ignoring state-machine climate entities
+  that expose `primary_climate_entity_id` and registry entries owned by the
+  `climate_relay_core` platform.
 - Remaining implementation work: optional humidity/window candidates, editing
   context, and a complete room-state provider remain open.
 - Required tests: primary climate missing area, duplicate primary climate,
@@ -423,11 +428,11 @@ Required room state:
 - Increment 3.3a implementation: `climate_relay_core/activate_room` validates
   the selected candidate, builds a default room payload, calls
   `room_management.activate_room(...)`, persists updated config entry options
-  through Home Assistant's config-entry update path, and reloads the entry so
-  runtime/entities pick up the new room.
-- Missing implementation work: no backend-owned non-Options-Flow operation.
+  through Home Assistant's config-entry update path, and relies on the existing
+  config-entry update listener to reload runtime/entities.
 - Required tests: activation validation, primary climate missing area, duplicate
-  primary climate, duplicate HA area, defaults, persistence and reload.
+  primary climate, duplicate HA area, defaults, persistence, and update-listener
+  reload behavior.
 
 ### Update room configuration
 

@@ -121,7 +121,9 @@ Expected coverage:
 Increment 3.3a adds executable partial coverage for this target. Python backend
 tests cover candidate discovery, missing-area rejection, duplicate primary
 climate rejection, duplicate HA-area rejection, one-room activation, use of
-`room_management.activate_room(...)`, and config-entry options persistence.
+`room_management.activate_room(...)`, admin-only WebSocket access, exclusion of
+Climate Relay's own virtual room climate entities, config-entry options
+persistence, and listener-owned reload behavior.
 Vitest/jsdom tests cover rendering the candidate section, unavailable reasons,
 activation WebSocket orchestration, activation errors, and preservation of room
 tile rendering.

@@ -318,6 +318,12 @@ room-management operations required by that GUI slice.
   marks already-active, missing-area, duplicate-primary, and duplicate-area
   candidates as unavailable, and activates one eligible candidate through the
   existing `rooms` options format and `room_management.activate_room(...)`.
+  Candidate discovery excludes Climate Relay's own virtual room climate
+  entities. Candidate discovery and activation WebSocket commands are
+  admin-only.
+- Persistence/reload behavior: activation updates config entry options through
+  Home Assistant's update mechanism and relies on the existing config-entry
+  update listener to reload runtime/entities.
 - Frontend behavior: the card renders an `Add room` section, shows unavailable
   reasons, calls the activation command, and shows a waiting-for-state-update
   success message until Home Assistant exposes the new room entity.
@@ -325,9 +331,10 @@ room-management operations required by that GUI slice.
   sensor setup, no target-temperature setup, no config subentries, no stable
   profile-ID migration, no Options Flow UX expansion, and no frontend-owned
   rule or schedule evaluation.
-- Verification focus: backend unit tests for candidate discovery, activation,
-  duplicate rejection, config-entry update/reload, and room-management reuse;
-  Vitest/jsdom tests for candidate rendering, activation orchestration,
+- Verification focus: backend unit tests for candidate discovery, own-entity
+  exclusion, admin-only WebSocket commands, activation, duplicate rejection,
+  config-entry update, listener-owned reload behavior, and room-management
+  reuse; Vitest/jsdom tests for candidate rendering, activation orchestration,
   activation errors, and preservation of existing room tile rendering.
 - Remaining acceptance gap: real Home Assistant / Playwright end-to-end
   acceptance for the custom card is still not present.

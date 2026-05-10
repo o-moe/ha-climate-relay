@@ -179,7 +179,10 @@ describe("climate-relay-card", () => {
 
     await waitForUpdates(element);
 
-    expect(textContent(element)).toContain("Schedule editing needs backend-owned schedule validation");
+    const rendered = textContent(element);
+    expect(rendered).toContain("Room activation is available for eligible primary climate candidates");
+    expect(rendered).toContain("Schedule editing needs backend-owned schedule validation");
+    expect(rendered).toContain("Override 1h remains a temporary fixed-duration scaffold");
   });
 });
 

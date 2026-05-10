@@ -35,10 +35,12 @@ Flow UX expansion.
   complete override flow.
 - Candidate discovery uses the `climate_relay_core/room_candidates` WebSocket
   command and returns area/climate candidates with backend-owned availability
-  reasons.
+  reasons. The command is admin-only because it supports room configuration and
+  exposes entity/area setup data.
 - Room activation uses the `climate_relay_core/activate_room` WebSocket command
   and persists exactly one activated room through the existing `rooms` options
-  shape.
+  shape. The command is admin-only because it mutates persistent config entry
+  options.
 
 ## Remaining backend-facing gaps
 
@@ -48,6 +50,14 @@ Increment 3.3a implements the first activation path. The backend lists climate
 candidates from Home Assistant state/entity registry context, marks missing
 areas, duplicate primary climates, and duplicate HA areas as unavailable, and
 activates one eligible primary climate through `room_management.activate_room`.
+Candidate discovery excludes Climate Relay's own virtual room climate entities,
+including state-machine entities that expose `primary_climate_entity_id` and
+registry entries owned by this integration.
+
+Activation updates config entry options through Home Assistant's config-entry
+update mechanism. Runtime and entity refresh are handled by the existing config
+entry update listener rather than a second direct reload in the WebSocket
+handler.
 
 Still open: richer room configuration after activation, optional humidity/window
 selection, target-temperature configuration, room disable/update operations, and

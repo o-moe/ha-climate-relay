@@ -321,9 +321,9 @@ export class ClimateRelayCard extends LitElement {
   private _renderGaps() {
     return html`
       <section class="gaps" aria-label="Climate Relay frontend contract gaps">
-        <div>Room activation needs backend candidate discovery and a frontend-callable activation operation.</div>
+        <div>Room activation is available for eligible primary climate candidates; rich room configuration still needs optional sensor, target, window, and schedule editing support.</div>
         <div>Schedule editing needs backend-owned schedule validation and update operations.</div>
-        <div>Override 1h is a temporary fixed-duration scaffold that uses existing backend services; supported action capabilities are not yet exposed as room state.</div>
+        <div>Override 1h remains a temporary fixed-duration scaffold until action capabilities are projected as room state.</div>
       </section>
     `;
   }

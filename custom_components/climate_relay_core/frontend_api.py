@@ -12,7 +12,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from . import room_management
-from .const import CONF_PRIMARY_CLIMATE_ENTITY_ID, CONF_ROOMS, DOMAIN
+from .const import (
+    ATTR_PRIMARY_CLIMATE_ENTITY_ID,
+    CONF_PRIMARY_CLIMATE_ENTITY_ID,
+    CONF_ROOMS,
+    DOMAIN,
+)
 from .room_config import default_room_data, normalize_rooms
 from .runtime import _resolve_area_reference
 
@@ -61,6 +66,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
 
 
 @callback
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required("type"): COMMAND_ROOM_CANDIDATES})
 @websocket_api.async_response
 async def websocket_room_candidates(
@@ -83,6 +89,7 @@ async def websocket_room_candidates(
 
 
 @callback
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): COMMAND_ACTIVATE_ROOM,
@@ -167,7 +174,6 @@ async def async_activate_room_from_frontend(
     options = {**entry.options, CONF_ROOMS: updated_rooms}
     try:
         hass.config_entries.async_update_entry(entry, options=options)
-        await hass.config_entries.async_reload(entry.entry_id)
     except Exception as err:
         raise FrontendApiError(
             ERROR_CONFIG_ENTRY_UPDATE_FAILED,
@@ -236,13 +242,28 @@ def _require_single_loaded_entry(hass: HomeAssistant) -> Any:
 
 def _climate_entity_ids(hass: HomeAssistant) -> set[str]:
     entity_ids = {
-        entity_id for entity_id in hass.states.async_entity_ids(CLIMATE_DOMAIN) if "." in entity_id
+        entity_id
+        for entity_id in hass.states.async_entity_ids(CLIMATE_DOMAIN)
+        if "." in entity_id and not _has_climate_relay_room_attribute(hass, entity_id)
     }
     entity_registry = er.async_get(hass)
     for entity_entry in entity_registry.entities.values():
-        if entity_entry.domain == CLIMATE_DOMAIN:
+        if (
+            entity_entry.domain == CLIMATE_DOMAIN
+            and getattr(entity_entry, "platform", None) != DOMAIN
+            and not _has_climate_relay_room_attribute(hass, entity_entry.entity_id)
+        ):
             entity_ids.add(entity_entry.entity_id)
     return entity_ids
+
+
+def _has_climate_relay_room_attribute(hass: HomeAssistant, entity_id: str) -> bool:
+    state = hass.states.get(entity_id)
+    return (
+        state is not None
+        and isinstance(getattr(state, "attributes", None), dict)
+        and ATTR_PRIMARY_CLIMATE_ENTITY_ID in state.attributes
+    )
 
 
 def _active_area_ids(hass: HomeAssistant, active_primary_climates: set[str]) -> set[str]:
