@@ -13,6 +13,10 @@ commands for candidate discovery and one-room activation, while still avoiding
 a broad backend API, config subentries, a new persistence format, or an Options
 Flow UX expansion.
 
+Increment 3.3b adds minimal schedule editing for the currently supported daily
+home window. It keeps the backend authoritative for validation, persistence,
+reload, and schedule evaluation.
+
 ## Implemented frontend slice
 
 - Lovelace element: `climate-relay-card`
@@ -27,6 +31,8 @@ Flow UX expansion.
   - `degradation_status`
   - `next_change_at`
   - `override_ends_at`
+  - `schedule_home_start`
+  - `schedule_home_end`
 - Quick override and resume buttons call the existing
   `climate_relay_core.set_area_override` and
   `climate_relay_core.clear_area_override` services.
@@ -41,6 +47,10 @@ Flow UX expansion.
   and persists exactly one activated room through the existing `rooms` options
   shape. The command is admin-only because it mutates persistent config entry
   options.
+- Schedule editing uses the `climate_relay_core/update_room_schedule`
+  WebSocket command and updates only `schedule_home_start` and
+  `schedule_home_end` for an already activated room. The command is admin-only
+  because it mutates persistent config entry options.
 
 ## Remaining backend-facing gaps
 
@@ -65,9 +75,14 @@ stable profile-ID migration.
 
 ### Schedule editing
 
-The frontend still lacks backend-owned schedule validation and schedule update
-operations. The card therefore documents the gap instead of implementing a fake
-schedule editor or duplicating schedule validation in TypeScript.
+Increment 3.3b implements the minimal daily-window schedule editor. The backend
+validates required start/end values, rejects invalid time values, rejects
+identical start/end times, normalizes accepted values to ISO time strings with
+seconds, and preserves the existing flat `rooms` persistence shape.
+
+Still open: weekly schedules, multiple daily timeblocks, target-temperature
+configuration in the schedule editor, richer schedule previews, and reload
+persistence coverage in real-HA custom-card acceptance.
 
 ### Quick override
 
@@ -93,6 +108,9 @@ operations discovered by this slice: schedule validation/update, minimal
 schedule editing, action capability projection, room update, and room disable.
 It should not return to broad backend-only room-management abstraction.
 
-Real Home Assistant / Playwright end-to-end acceptance for the custom card is
-still missing. Current evidence is Python backend tests plus Vitest/jsdom
-frontend tests against mocked Home Assistant objects.
+The existing `scripts/run_epic_acceptance.py` acceptance runner now includes an
+Increment 3 schedule-editing path (`--epic 3`) that reuses the existing HA
+preparation and Playwright mechanisms. It injects the built custom card into
+the HA frontend, edits schedule start/end through the GUI, and verifies the
+updated room state attributes through the HA API. It does not yet perform a
+config-entry reload/restart persistence check for the custom-card flow.

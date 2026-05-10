@@ -104,6 +104,8 @@ class RegulationProfileConfig:
     home_target: RoomTarget
     away_target: RoomTarget
     schedule: RoomSchedule
+    schedule_home_start: str
+    schedule_home_end: str
 
 
 class GlobalRuntime:
@@ -400,6 +402,8 @@ def build_room_configs(
                     temperature=room[CONF_AWAY_TARGET_TEMPERATURE],
                 ),
                 schedule=room[CONF_SCHEDULE],
+                schedule_home_start=room[CONF_SCHEDULE_HOME_START],
+                schedule_home_end=room[CONF_SCHEDULE_HOME_END],
             )
         )
 
@@ -490,6 +494,14 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
         CONF_HOME_TARGET_TEMPERATURE: float(raw_value.get(CONF_HOME_TARGET_TEMPERATURE)),
         CONF_AWAY_TARGET_TYPE: _normalize_target_type(raw_value.get(CONF_AWAY_TARGET_TYPE)),
         CONF_AWAY_TARGET_TEMPERATURE: float(raw_value.get(CONF_AWAY_TARGET_TEMPERATURE)),
+        CONF_SCHEDULE_HOME_START: _normalize_time(
+            _schedule_value(raw_value, CONF_SCHEDULE_HOME_START),
+            default=DEFAULT_SCHEDULE_HOME_START,
+        ).isoformat(),
+        CONF_SCHEDULE_HOME_END: _normalize_time(
+            _schedule_value(raw_value, CONF_SCHEDULE_HOME_END),
+            default=DEFAULT_SCHEDULE_HOME_END,
+        ).isoformat(),
         CONF_SCHEDULE: _normalize_schedule(raw_value),
         "legacy_name": legacy_name,
     }
@@ -498,18 +510,23 @@ def _normalize_room_config(raw_value: object) -> MappingProxyType[str, object]:
 
 def _normalize_schedule(raw_value: dict[str, object]) -> RoomSchedule:
     """Normalize the persisted schedule payload for one room."""
+    return build_daily_home_window_schedule(
+        _normalize_time(
+            _schedule_value(raw_value, CONF_SCHEDULE_HOME_START),
+            default=DEFAULT_SCHEDULE_HOME_START,
+        ),
+        _normalize_time(
+            _schedule_value(raw_value, CONF_SCHEDULE_HOME_END),
+            default=DEFAULT_SCHEDULE_HOME_END,
+        ),
+    )
+
+
+def _schedule_value(raw_value: dict[str, object], key: str) -> object:
     raw_schedule = _normalize_optional_value(raw_value.get(CONF_SCHEDULE))
     if isinstance(raw_schedule, dict):
-        raw_home_start = raw_schedule.get(CONF_SCHEDULE_HOME_START)
-        raw_home_end = raw_schedule.get(CONF_SCHEDULE_HOME_END)
-    else:
-        raw_home_start = raw_value.get(CONF_SCHEDULE_HOME_START)
-        raw_home_end = raw_value.get(CONF_SCHEDULE_HOME_END)
-
-    return build_daily_home_window_schedule(
-        _normalize_time(raw_home_start, default=DEFAULT_SCHEDULE_HOME_START),
-        _normalize_time(raw_home_end, default=DEFAULT_SCHEDULE_HOME_END),
-    )
+        return raw_schedule.get(key)
+    return raw_value.get(key)
 
 
 def _normalize_time(raw_value: object, *, default: str) -> time:

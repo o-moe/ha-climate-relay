@@ -29,6 +29,8 @@ function toRoomTile(state: HomeAssistantState): ClimateRelayRoomTile {
     degradationStatus: stringAttribute(state, "degradation_status"),
     nextChangeAt: stringAttribute(state, "next_change_at"),
     overrideEndsAt: stringAttribute(state, "override_ends_at"),
+    scheduleHomeStart: stringAttribute(state, "schedule_home_start"),
+    scheduleHomeEnd: stringAttribute(state, "schedule_home_end"),
   };
 }
 

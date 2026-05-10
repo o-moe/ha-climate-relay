@@ -25,10 +25,12 @@ loads backend-owned room candidates through WebSocket, renders an `Add room`
 section, activates one eligible candidate through a backend-owned operation,
 and then waits for Home Assistant state to expose the new room tile.
 
-Schedule editing remains a visible gap until backend-owned schedule validation
-and schedule update operations exist. Action capability projection also remains
-open; the quick override control is still a fixed one-hour scaffold over the
-existing services.
+Increment 3.3b adds minimal editing for the initially supported daily schedule
+window. The card renders backend-owned `schedule_home_start` and
+`schedule_home_end` room attributes, collects edited start/end values, and
+saves through the admin-only backend WebSocket schedule update operation.
+Action capability projection remains open; the quick override control is still
+a fixed one-hour scaffold over the existing services.
 
 ### Room overview
 
@@ -109,6 +111,10 @@ The schedule editor shall:
 The frontend shall not evaluate schedule behavior independently. It may render
 schedule data and collect user input, but backend-owned logic remains
 authoritative.
+
+The Increment 3.3b prototype intentionally supports only one daily home window
+with editable start and end time. It does not add weekly schedules, multiple
+timeblocks, target-temperature editing, or drag-and-drop editing.
 
 ### Manual override
 

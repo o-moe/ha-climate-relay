@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import { activateRoom, fetchRoomCandidates } from "./backend-api";
+import { activateRoom, fetchRoomCandidates, updateRoomSchedule } from "./backend-api";
 import { extractClimateRelayRooms } from "./room-state";
 import type {
   ClimateRelayCardConfig,
@@ -20,6 +20,10 @@ export class ClimateRelayCard extends LitElement {
   @state() private _candidateLoading = false;
   @state() private _activatingCandidateId?: string;
   @state() private _activationMessage?: string;
+  @state() private _scheduleEdits: Record<string, { start: string; end: string }> = {};
+  @state() private _scheduleErrors: Record<string, string> = {};
+  @state() private _scheduleMessages: Record<string, string> = {};
+  @state() private _savingScheduleEntityId?: string;
   private _candidateHass?: HomeAssistantLike;
 
   public setConfig(config: ClimateRelayCardConfig): void {
@@ -161,6 +165,21 @@ export class ClimateRelayCard extends LitElement {
       grid-template-columns: minmax(90px, 1fr) auto auto;
     }
 
+    .schedule-editor {
+      align-items: end;
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(88px, 1fr)) auto;
+    }
+
+    label {
+      color: var(--secondary-text-color, #52616f);
+      display: grid;
+      font-size: 12px;
+      gap: 4px;
+      min-width: 0;
+    }
+
     input {
       background: var(--card-background-color, #ffffff);
       border: 1px solid var(--divider-color, #d8dee4);
@@ -252,7 +271,10 @@ export class ClimateRelayCard extends LitElement {
           ${this._renderMetric("Degradation", room.degradationStatus)}
           ${this._renderMetric("Next change", room.nextChangeAt)}
           ${this._renderMetric("Override ends", room.overrideEndsAt)}
+          ${this._renderMetric("Schedule start", room.scheduleHomeStart)}
+          ${this._renderMetric("Schedule end", room.scheduleHomeEnd)}
         </dl>
+        ${this._renderScheduleEditor(room)}
         <div class="actions">
           <input
             aria-label=${`${room.displayName} override target`}
@@ -274,6 +296,44 @@ export class ClimateRelayCard extends LitElement {
       return nothing;
     }
     return html`<dt>${label}</dt><dd>${value}</dd>`;
+  }
+
+  private _renderScheduleEditor(room: ClimateRelayRoomTile) {
+    const edit = this._scheduleValue(room);
+    const disabled = this._savingScheduleEntityId === room.entityId;
+    return html`
+      <div class="schedule-editor">
+        <label>
+          Start
+          <input
+            aria-label=${`${room.displayName} schedule start`}
+            type="time"
+            step="60"
+            .value=${toTimeInputValue(edit.start)}
+            @input=${(event: InputEvent) => this._updateScheduleEdit(room, "start", event)}
+          />
+        </label>
+        <label>
+          End
+          <input
+            aria-label=${`${room.displayName} schedule end`}
+            type="time"
+            step="60"
+            .value=${toTimeInputValue(edit.end)}
+            @input=${(event: InputEvent) => this._updateScheduleEdit(room, "end", event)}
+          />
+        </label>
+        <button ?disabled=${disabled} @click=${() => this._saveSchedule(room)}>
+          ${disabled ? "Saving" : "Save"}
+        </button>
+      </div>
+      ${this._scheduleErrors[room.entityId]
+        ? html`<div class="message error">${this._scheduleErrors[room.entityId]}</div>`
+        : nothing}
+      ${this._scheduleMessages[room.entityId]
+        ? html`<div class="message">${this._scheduleMessages[room.entityId]}</div>`
+        : nothing}
+    `;
   }
 
   private _renderCandidateSection() {
@@ -321,11 +381,36 @@ export class ClimateRelayCard extends LitElement {
   private _renderGaps() {
     return html`
       <section class="gaps" aria-label="Climate Relay frontend contract gaps">
-        <div>Room activation is available for eligible primary climate candidates; rich room configuration still needs optional sensor, target, window, and schedule editing support.</div>
-        <div>Schedule editing needs backend-owned schedule validation and update operations.</div>
+        <div>Room activation is available for eligible primary climate candidates; rich room configuration still needs optional sensor, target, and window support.</div>
+        <div>Daily schedule start/end editing is available through backend-owned validation and update operations.</div>
         <div>Override 1h remains a temporary fixed-duration scaffold until action capabilities are projected as room state.</div>
       </section>
     `;
+  }
+
+  private _scheduleValue(room: ClimateRelayRoomTile): { start: string; end: string } {
+    return (
+      this._scheduleEdits[room.entityId] ?? {
+        start: room.scheduleHomeStart ?? "",
+        end: room.scheduleHomeEnd ?? "",
+      }
+    );
+  }
+
+  private _updateScheduleEdit(
+    room: ClimateRelayRoomTile,
+    field: "start" | "end",
+    event: InputEvent,
+  ): void {
+    const input = event.target as HTMLInputElement;
+    const current = this._scheduleValue(room);
+    this._scheduleEdits = {
+      ...this._scheduleEdits,
+      [room.entityId]: {
+        ...current,
+        [field]: input.value,
+      },
+    };
   }
 
   private _updateOverrideTarget(room: ClimateRelayRoomTile, event: InputEvent): void {
@@ -359,6 +444,40 @@ export class ClimateRelayCard extends LitElement {
     await this.hass.callService("climate_relay_core", "clear_area_override", {
       area_id: roomReference,
     });
+  }
+
+  private async _saveSchedule(room: ClimateRelayRoomTile): Promise<void> {
+    if (!this.hass?.connection) {
+      return;
+    }
+    const edit = this._scheduleValue(room);
+    this._savingScheduleEntityId = room.entityId;
+    this._scheduleErrors = { ...this._scheduleErrors, [room.entityId]: "" };
+    this._scheduleMessages = { ...this._scheduleMessages, [room.entityId]: "" };
+    try {
+      const result = await updateRoomSchedule(this.hass, room.primaryClimateEntityId, {
+        schedule_home_start: edit.start,
+        schedule_home_end: edit.end,
+      });
+      this._scheduleEdits = {
+        ...this._scheduleEdits,
+        [room.entityId]: {
+          start: result.schedule_home_start,
+          end: result.schedule_home_end,
+        },
+      };
+      this._scheduleMessages = {
+        ...this._scheduleMessages,
+        [room.entityId]: "Schedule saved. Waiting for Home Assistant state to update.",
+      };
+    } catch (error) {
+      this._scheduleErrors = {
+        ...this._scheduleErrors,
+        [room.entityId]: errorMessage(error),
+      };
+    } finally {
+      this._savingScheduleEntityId = undefined;
+    }
   }
 
   private async _loadCandidates(): Promise<void> {
@@ -402,6 +521,13 @@ function formatTemperature(value: number | undefined): string | undefined {
 
 function formatNumber(value: number | undefined): string | undefined {
   return value === undefined ? undefined : value.toFixed(1);
+}
+
+function toTimeInputValue(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+  return value.length >= 5 ? value.slice(0, 5) : value;
 }
 
 function formatUnavailableReason(reason: string): string {

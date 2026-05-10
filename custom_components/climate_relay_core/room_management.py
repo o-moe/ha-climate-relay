@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from .const import CONF_PRIMARY_CLIMATE_ENTITY_ID
-from .room_config import normalize_room_options
+from .room_config import (
+    normalize_daily_schedule_window,
+    normalize_room_options,
+)
 
 
 class RoomManagementError(ValueError):
@@ -70,6 +73,25 @@ def disable_room(
         for existing_index, existing_room in enumerate(existing_rooms)
         if existing_index != index
     ]
+
+
+def update_room_schedule(
+    existing_rooms: list[dict[str, Any]],
+    room_ref: str,
+    *,
+    schedule_home_start: Any,
+    schedule_home_end: Any,
+) -> list[dict[str, Any]]:
+    """Return a new room list with only one room's daily schedule fields updated."""
+    index = _require_room_index(existing_rooms, room_ref)
+    schedule = normalize_daily_schedule_window(schedule_home_start, schedule_home_end)
+
+    updated_rooms = [dict(existing_room) for existing_room in existing_rooms]
+    updated_rooms[index] = {
+        **updated_rooms[index],
+        **schedule,
+    }
+    return updated_rooms
 
 
 def _normalize_submitted_room(submitted_room: dict[str, Any]) -> dict[str, Any]:

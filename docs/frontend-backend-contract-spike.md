@@ -42,6 +42,14 @@ backend API. Both commands require a Home Assistant admin user because they
 support room configuration; activation also mutates persistent config entry
 options.
 
+Increment 3.3b adds `climate_relay_core/update_room_schedule` for the existing
+daily-window schedule model. The command accepts a transitional
+`primary_climate_entity_id` room reference plus `schedule_home_start` and
+`schedule_home_end`, requires an admin user, validates the schedule in backend
+code, updates only those two fields on the matching room in the existing
+`rooms` options list, and relies on the existing config-entry update listener
+for reload.
+
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.
 
@@ -165,10 +173,13 @@ The climate entity currently exposes these frontend-relevant attributes:
 - `next_change_at`
 - `override_ends_at`
 - `degradation_status`
+- `schedule_home_start`
+- `schedule_home_end`
 
 The climate entity does not currently expose a complete room state object with
-`profile_id`, `area_id`, schedule summary, capabilities, optional source entity
-states, or global-mode influence.
+`profile_id`, `area_id`, capabilities, optional source entity states, or
+global-mode influence. Schedule projection is intentionally limited to the
+current daily-window start/end fields.
 
 ### Current select entity for global mode
 

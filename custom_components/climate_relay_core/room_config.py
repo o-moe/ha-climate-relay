@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import time
 from typing import Any
 
 from .const import (
@@ -33,6 +34,18 @@ VALID_WINDOW_ACTION_TYPES = {
     "minimum_temperature",
     "custom_temperature",
 }
+
+
+class ScheduleValidationError(ValueError):
+    """Raised when a daily schedule window payload is invalid."""
+
+
+class ScheduleWindowRequiredError(ScheduleValidationError):
+    """Raised when a schedule window endpoint is missing or identical."""
+
+
+class InvalidScheduleTimeError(ScheduleValidationError):
+    """Raised when a schedule window endpoint is not a valid time value."""
 
 
 def default_room_data() -> dict[str, Any]:
@@ -152,3 +165,26 @@ def schedule_value(values: dict[str, Any], key: str, default: str) -> Any:
 def validate_room_schedule_window(start: str | None, end: str | None) -> bool:
     """Preserve the Options Flow invariant that schedule endpoints differ."""
     return start != end
+
+
+def normalize_daily_schedule_window(start: Any, end: Any) -> dict[str, str]:
+    """Validate and normalize the supported daily home schedule window."""
+    normalized_start = normalize_required_schedule_time(start)
+    normalized_end = normalize_required_schedule_time(end)
+    if normalized_start == normalized_end:
+        raise ScheduleWindowRequiredError("Schedule start and end must be different.")
+    return {
+        CONF_SCHEDULE_HOME_START: normalized_start,
+        CONF_SCHEDULE_HOME_END: normalized_end,
+    }
+
+
+def normalize_required_schedule_time(raw_value: Any) -> str:
+    """Normalize one required schedule time field to ISO time with seconds."""
+    value = normalize_time_field_value(raw_value)
+    if value is None:
+        raise ScheduleWindowRequiredError("Schedule start and end are required.")
+    try:
+        return time.fromisoformat(value.strip()).isoformat()
+    except (TypeError, ValueError) as err:
+        raise InvalidScheduleTimeError(f"Invalid schedule time: {raw_value!r}") from err

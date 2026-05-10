@@ -339,6 +339,35 @@ room-management operations required by that GUI slice.
 - Remaining acceptance gap: real Home Assistant / Playwright end-to-end
   acceptance for the custom card is still not present.
 
+### Increment 3.3b: Minimal GUI schedule editing
+
+- Scope: add backend-owned validation and update for the existing daily
+  schedule window fields, then expose that operation through the custom card.
+- Implemented flow: the room climate entity exposes `schedule_home_start` and
+  `schedule_home_end`; the card renders both values, lets the user edit start
+  and end time, and saves through the admin-only
+  `climate_relay_core/update_room_schedule` WebSocket command.
+- Persistence/reload behavior: schedule updates replace only
+  `schedule_home_start` and `schedule_home_end` on the referenced room inside
+  the existing `rooms` options list, preserve unrelated room fields and other
+  rooms, update options through Home Assistant's config-entry update mechanism,
+  and rely on the existing update listener for reload.
+- Non-scope: no weekly schedules, no multiple timeblocks, no full schedule
+  editor, no frontend-owned schedule evaluation, no config subentries, no
+  stable profile-ID migration, no Options Flow UX expansion, and no target,
+  optional-sensor, or window-behavior GUI editing.
+- Verification focus: pure backend validation for valid, missing, invalid, and
+  identical daily schedule endpoints; WebSocket success/error/admin coverage;
+  entity attribute exposure; Vitest/jsdom coverage for rendering, save
+  orchestration, backend error display, candidate activation preservation, and
+  no TypeScript schedule evaluation.
+- Acceptance status: the existing `scripts/run_epic_acceptance.py` runner has
+  an Increment 3 schedule-editing path (`--epic 3`) that reuses the HA
+  preparation, API profile setup, and Playwright Chromium mechanisms. It builds
+  and injects the custom card into the HA frontend, edits schedule start/end
+  through the GUI, then verifies resulting HA room state attributes through
+  the HA API. Reload persistence is not covered yet by this runner.
+
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 
 Goal: make the backend reliable under restart and component failure while

@@ -147,10 +147,20 @@ Expected coverage:
 - room overview or room detail shows the resulting next scheduled change
 - runtime behavior follows backend-owned schedule evaluation
 
-Increment 3.3 documents this as a backend-facing gap because the frontend does
-not yet have backend-owned schedule validation or schedule update operations.
-Increment 3.3a keeps this gap open and does not add frontend-owned schedule
-validation.
+Increment 3.3b adds executable partial coverage for this target. Python tests
+cover backend-owned daily-window validation, structured WebSocket success and
+error handling, admin-only access, config-entry option persistence, preservation
+of unrelated room data, listener-owned reload behavior, and schedule start/end
+entity attributes. Vitest/jsdom tests cover rendering start/end attributes,
+save orchestration, backend error display, preservation of room tile rendering,
+and preservation of candidate discovery and activation behavior without
+TypeScript schedule evaluation.
+
+The existing HA acceptance runner has been extended with
+`uv run python scripts/run_epic_acceptance.py --epic 3`, which reuses the
+existing HA preparation/API/Playwright structure for a custom-card
+schedule-editing GUI path. Reload persistence remains an explicit acceptance
+gap for this custom-card flow.
 
 ### UX-AT-005 Quick override acceptance
 
