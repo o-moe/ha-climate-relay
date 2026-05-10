@@ -765,7 +765,7 @@ async function setSchedule(labelSuffix, value) {{
       input.value = inputValue;
       input.dispatchEvent(new InputEvent("input", {{ bubbles: true, composed: true }}));
     }},
-    [label, value],
+    [labelSuffix, value],
   );
 }}
 
