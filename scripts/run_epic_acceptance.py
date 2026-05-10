@@ -745,7 +745,7 @@ async function waitForCardText(text) {{
   await page.waitForFunction(
     (expected) => {{
       const card = document.querySelector("climate-relay-card");
-      return card?.shadowRoot?.innerText.includes(expected);
+      return card?.shadowRoot?.textContent?.includes(expected);
     }},
     text,
     {{ timeout: 20000 }},
