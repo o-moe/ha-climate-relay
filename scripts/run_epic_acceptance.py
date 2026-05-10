@@ -430,6 +430,59 @@ def _prepare_epic_2_profile(*, base_url: str, token: str) -> None:
     time.sleep(5.0)
 
 
+def _prepare_epic_3_profile(*, base_url: str, token: str) -> None:
+    entry_id = _find_config_entry_id(
+        base_url=base_url,
+        token=token,
+        domain="climate_relay_core",
+    )
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/options/flow",
+        method="POST",
+        payload={"handler": entry_id},
+    )
+    flow_id = str(flow["flow_id"])
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "person_entity_ids": ["person.bjorn"],
+            "unknown_state_handling": "away",
+            "fallback_temperature": 20.0,
+            "manual_override_reset_enabled": False,
+            "simulation_mode": True,
+            "verbose_logging": False,
+        },
+    )
+    if flow.get("step_id") != "profiles":
+        raise AcceptanceError(f"Expected profiles options step, got {flow!r}.")
+
+    _clear_profiles_in_flow(base_url=base_url, token=token, flow_id=flow_id)
+    _add_epic_2_profile(
+        base_url=base_url,
+        token=token,
+        flow_id=flow_id,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+        window_entity_id=EPIC_2_WINDOW_ENTITIES[0],
+        home_target_temperature=20.0,
+        away_target_temperature=17.0,
+    )
+    result = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={"profile_action": "finish"},
+    )
+    if result.get("type") != "create_entry":
+        raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
+    time.sleep(5.0)
+
+
 def _add_epic_2_profile(
     *,
     base_url: str,
@@ -1692,7 +1745,7 @@ def _run_epic_3(
         _run_command(command, env=env, description=description)
 
     print("[acceptance] Prepare Increment 3 schedule-editing profile through API")
-    _prepare_epic_1_profile(base_url=base_url, token=token)
+    _prepare_epic_3_profile(base_url=base_url, token=token)
     room_entity_id = _find_room_entity_for_primary(
         base_url=base_url,
         token=token,
