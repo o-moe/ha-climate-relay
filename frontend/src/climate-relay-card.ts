@@ -162,7 +162,15 @@ export class ClimateRelayCard extends LitElement {
       align-items: end;
       display: grid;
       gap: 8px;
-      grid-template-columns: minmax(90px, 1fr) auto auto;
+      grid-template-columns: minmax(90px, 1fr) auto;
+    }
+
+    .override-status {
+      color: var(--secondary-text-color, #52616f);
+      display: grid;
+      font-size: 13px;
+      gap: 4px;
+      line-height: 1.4;
     }
 
     .schedule-editor {
@@ -268,25 +276,16 @@ export class ClimateRelayCard extends LitElement {
           ${this._renderMetric("Current", formatTemperature(room.currentTemperature))}
           ${this._renderMetric("Target", formatTemperature(room.targetTemperature))}
           ${this._renderMetric("Context", room.activeControlContext)}
+          ${this._renderMetric("Manual override target", formatTemperature(room.manualOverrideTargetTemperature))}
+          ${this._renderMetric("Manual override ends", room.manualOverrideEndsAt)}
           ${this._renderMetric("Degradation", room.degradationStatus)}
           ${this._renderMetric("Next change", room.nextChangeAt)}
-          ${this._renderMetric("Override ends", room.overrideEndsAt)}
+          ${this._renderMetric("Override ends", room.manualOverrideEndsAt ? undefined : room.overrideEndsAt)}
           ${this._renderMetric("Schedule start", room.scheduleHomeStart)}
           ${this._renderMetric("Schedule end", room.scheduleHomeEnd)}
         </dl>
         ${this._renderScheduleEditor(room)}
-        <div class="actions">
-          <input
-            aria-label=${`${room.displayName} override target`}
-            inputmode="decimal"
-            .value=${this._overrideTargets[room.entityId] ??
-            formatNumber(room.targetTemperature) ??
-            ""}
-            @input=${(event: InputEvent) => this._updateOverrideTarget(room, event)}
-          />
-          <button @click=${() => this._setOverride(room)}>Override 1h</button>
-          <button class="secondary" @click=${() => this._clearOverride(room)}>Resume</button>
-        </div>
+        ${this._renderOverrideControls(room)}
       </article>
     `;
   }
@@ -333,6 +332,48 @@ export class ClimateRelayCard extends LitElement {
       ${this._scheduleMessages[room.entityId]
         ? html`<div class="message">${this._scheduleMessages[room.entityId]}</div>`
         : nothing}
+    `;
+  }
+
+  private _renderOverrideControls(room: ClimateRelayRoomTile) {
+    if (room.manualOverrideActive) {
+      return html`
+        <div class="override-status">
+          <div>Manual override active</div>
+          ${room.manualOverrideTargetTemperature !== undefined
+            ? html`<div>Target ${formatTemperature(room.manualOverrideTargetTemperature)}</div>`
+            : nothing}
+          ${room.manualOverrideEndsAt ? html`<div>Ends ${room.manualOverrideEndsAt}</div>` : nothing}
+        </div>
+        ${room.canClearOverride
+          ? html`
+              <div class="actions">
+                <span></span>
+                <button class="secondary" @click=${() => this._clearOverride(room)}>
+                  Resume schedule
+                </button>
+              </div>
+            `
+          : nothing}
+      `;
+    }
+
+    if (!room.canSetOverride) {
+      return nothing;
+    }
+
+    return html`
+      <div class="actions">
+        <input
+          aria-label=${`${room.displayName} override target`}
+          inputmode="decimal"
+          .value=${this._overrideTargets[room.entityId] ??
+          formatNumber(room.targetTemperature) ??
+          ""}
+          @input=${(event: InputEvent) => this._updateOverrideTarget(room, event)}
+        />
+        <button @click=${() => this._setOverride(room)}>Override for 1h</button>
+      </div>
     `;
   }
 
@@ -383,7 +424,7 @@ export class ClimateRelayCard extends LitElement {
       <section class="gaps" aria-label="Climate Relay frontend contract gaps">
         <div>Room activation is available for eligible primary climate candidates; rich room configuration still needs optional sensor, target, and window support.</div>
         <div>Daily schedule start/end editing is available through backend-owned validation and update operations.</div>
-        <div>Override 1h remains a temporary fixed-duration scaffold until action capabilities are projected as room state.</div>
+        <div>Override controls are rendered from backend-projected room action capabilities.</div>
       </section>
     `;
   }
@@ -422,6 +463,9 @@ export class ClimateRelayCard extends LitElement {
   }
 
   private async _setOverride(room: ClimateRelayRoomTile): Promise<void> {
+    if (!room.canSetOverride) {
+      return;
+    }
     const rawValue = this._overrideTargets[room.entityId] ?? formatNumber(room.targetTemperature);
     const targetTemperature = Number(rawValue);
     if (!this.hass?.callService || !Number.isFinite(targetTemperature)) {
@@ -437,7 +481,7 @@ export class ClimateRelayCard extends LitElement {
   }
 
   private async _clearOverride(room: ClimateRelayRoomTile): Promise<void> {
-    if (!this.hass?.callService) {
+    if (!this.hass?.callService || !room.canClearOverride) {
       return;
     }
     const roomReference = room.primaryClimateEntityId;

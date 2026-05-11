@@ -21,8 +21,14 @@ from custom_components.climate_relay_core.climate import (
 )
 from custom_components.climate_relay_core.const import (
     ATTR_ACTIVE_CONTROL_CONTEXT,
+    ATTR_CAN_CLEAR_OVERRIDE,
+    ATTR_CAN_SET_OVERRIDE,
     ATTR_DEGRADATION_STATUS,
     ATTR_HUMIDITY_ENTITY_ID,
+    ATTR_MANUAL_OVERRIDE_ACTIVE,
+    ATTR_MANUAL_OVERRIDE_ENDS_AT,
+    ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE,
+    ATTR_MANUAL_OVERRIDE_TERMINATION_TYPE,
     ATTR_NEXT_CHANGE_AT,
     ATTR_OVERRIDE_ENDS_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
@@ -31,7 +37,11 @@ from custom_components.climate_relay_core.const import (
     DOMAIN,
 )
 from custom_components.climate_relay_core.domain import EffectivePresence
-from custom_components.climate_relay_core.runtime import build_global_config, build_room_configs
+from custom_components.climate_relay_core.runtime import (
+    GlobalRuntime,
+    build_global_config,
+    build_room_configs,
+)
 
 
 class RoomClimateEntityTests(IsolatedAsyncioTestCase):
@@ -117,6 +127,13 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         self.assertEqual(entity.current_temperature, 19.2)
         self.assertEqual(entity.current_humidity, 47.5)
         self.assertEqual(entity.extra_state_attributes[ATTR_ACTIVE_CONTROL_CONTEXT], "schedule")
+        self.assertEqual(
+            entity.extra_state_attributes["supported_room_actions"],
+            ["set_manual_override_duration"],
+        )
+        self.assertIs(entity.extra_state_attributes[ATTR_CAN_SET_OVERRIDE], True)
+        self.assertIs(entity.extra_state_attributes[ATTR_CAN_CLEAR_OVERRIDE], False)
+        self.assertIs(entity.extra_state_attributes[ATTR_MANUAL_OVERRIDE_ACTIVE], False)
         self.assertNotIn(ATTR_DEGRADATION_STATUS, entity.extra_state_attributes)
         self.assertEqual(
             entity.extra_state_attributes[ATTR_PRIMARY_CLIMATE_ENTITY_ID],
@@ -194,6 +211,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         ends_at = datetime(2026, 4, 30, 13, 30, tzinfo=ZoneInfo("Europe/Berlin"))
         entity._runtime.manual_override_for_profile.return_value = SimpleNamespace(
             target_temperature=23.0,
+            termination_type="duration",
             ends_at=ends_at,
         )
         entity._runtime.next_manual_override_reset_at.return_value = None
@@ -207,7 +225,105 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
             entity.extra_state_attributes[ATTR_OVERRIDE_ENDS_AT],
             "2026-04-30T13:30:00+02:00",
         )
+        self.assertEqual(
+            entity.extra_state_attributes["supported_room_actions"],
+            ["set_manual_override_duration", "clear_manual_override"],
+        )
+        self.assertIs(entity.extra_state_attributes[ATTR_CAN_SET_OVERRIDE], True)
+        self.assertIs(entity.extra_state_attributes[ATTR_CAN_CLEAR_OVERRIDE], True)
+        self.assertIs(entity.extra_state_attributes[ATTR_MANUAL_OVERRIDE_ACTIVE], True)
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE],
+            23.0,
+        )
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_MANUAL_OVERRIDE_ENDS_AT],
+            "2026-04-30T13:30:00+02:00",
+        )
+        self.assertEqual(
+            entity.extra_state_attributes[ATTR_MANUAL_OVERRIDE_TERMINATION_TYPE],
+            "duration",
+        )
         self.assertNotIn(ATTR_NEXT_CHANGE_AT, entity.extra_state_attributes)
+
+    async def test_action_capability_attributes_follow_runtime_override_lifecycle(self) -> None:
+        hass = Mock()
+        hass.states.get = Mock(
+            return_value=SimpleNamespace(
+                state="heat",
+                attributes={"temperature": 20.0, "current_temperature": 19.5},
+            )
+        )
+        (room_config,) = build_room_configs(
+            {},
+            {
+                CONF_ROOMS: [
+                    {
+                        "primary_climate_entity_id": "climate.office",
+                        "home_target_temperature": 20.0,
+                        "away_target_type": "absolute",
+                        "away_target_temperature": 17.0,
+                        "schedule_home_start": "06:00:00",
+                        "schedule_home_end": "22:00:00",
+                    }
+                ]
+            },
+        )
+        runtime = GlobalRuntime(hass, build_global_config({}, {}), (room_config,))
+        entity = ClimateRelayCoreRoomClimateEntity("entry-1", hass, runtime, room_config)
+        timezone = ZoneInfo("Europe/Berlin")
+
+        with (
+            patch.object(
+                climate_platform.dt_util,
+                "now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch.object(climate_platform.dt_util, "DEFAULT_TIME_ZONE", timezone),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.now",
+                return_value=datetime(2026, 4, 30, 12, 0, tzinfo=timezone),
+            ),
+            patch(
+                "custom_components.climate_relay_core.runtime.dt_util.DEFAULT_TIME_ZONE",
+                timezone,
+            ),
+        ):
+            attrs = entity.extra_state_attributes
+            self.assertEqual(attrs[ATTR_PRIMARY_CLIMATE_ENTITY_ID], "climate.office")
+            self.assertEqual(attrs["schedule_home_start"], "06:00:00")
+            self.assertEqual(attrs["schedule_home_end"], "22:00:00")
+            self.assertEqual(attrs[ATTR_ACTIVE_CONTROL_CONTEXT], "schedule")
+            self.assertNotIn(ATTR_DEGRADATION_STATUS, attrs)
+            self.assertIs(attrs[ATTR_CAN_SET_OVERRIDE], True)
+            self.assertIs(attrs[ATTR_CAN_CLEAR_OVERRIDE], False)
+            self.assertIs(attrs[ATTR_MANUAL_OVERRIDE_ACTIVE], False)
+
+            await runtime.async_set_area_override(
+                area_id="climate.office",
+                target_temperature=22.5,
+                termination_type="duration",
+                duration_minutes=60,
+                source="test",
+            )
+
+            attrs = entity.extra_state_attributes
+            self.assertEqual(attrs[ATTR_ACTIVE_CONTROL_CONTEXT], "manual_override")
+            self.assertEqual(attrs[ATTR_OVERRIDE_ENDS_AT], "2026-04-30T13:00:00+02:00")
+            self.assertIs(attrs[ATTR_MANUAL_OVERRIDE_ACTIVE], True)
+            self.assertEqual(attrs[ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE], 22.5)
+            self.assertEqual(attrs[ATTR_MANUAL_OVERRIDE_ENDS_AT], "2026-04-30T13:00:00+02:00")
+            self.assertEqual(attrs[ATTR_MANUAL_OVERRIDE_TERMINATION_TYPE], "duration")
+            self.assertIs(attrs[ATTR_CAN_CLEAR_OVERRIDE], True)
+
+            await runtime.async_clear_area_override(area_id="climate.office", source="test")
+
+            attrs = entity.extra_state_attributes
+            self.assertEqual(attrs[ATTR_ACTIVE_CONTROL_CONTEXT], "schedule")
+            self.assertIs(attrs[ATTR_MANUAL_OVERRIDE_ACTIVE], False)
+            self.assertIs(attrs[ATTR_CAN_CLEAR_OVERRIDE], False)
+            self.assertNotIn(ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE, attrs)
+            self.assertNotIn(ATTR_MANUAL_OVERRIDE_ENDS_AT, attrs)
 
     async def test_window_override_activates_after_delay_and_uses_window_action(
         self,
@@ -332,6 +448,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         reset_at = datetime(2026, 4, 30, 13, 0, tzinfo=timezone)
         entity._runtime.manual_override_for_profile.return_value = SimpleNamespace(
             target_temperature=23.0,
+            termination_type="duration",
             ends_at=ends_at,
         )
         entity._runtime.next_manual_override_reset_at.return_value = reset_at
@@ -676,7 +793,7 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         runtime.subscribe_for_profile = Mock(return_value=lambda: None)
         runtime.manual_override_for_profile = Mock(
             side_effect=lambda profile_id: (
-                SimpleNamespace(target_temperature=22.0, ends_at=None)
+                SimpleNamespace(target_temperature=22.0, termination_type="never", ends_at=None)
                 if profile_id == "climate_office"
                 else None
             )

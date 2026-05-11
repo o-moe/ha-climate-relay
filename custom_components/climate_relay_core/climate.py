@@ -26,19 +26,27 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_ACTIVE_CONTROL_CONTEXT,
+    ATTR_CAN_CLEAR_OVERRIDE,
+    ATTR_CAN_SET_OVERRIDE,
     ATTR_DEGRADATION_STATUS,
     ATTR_HUMIDITY_ENTITY_ID,
+    ATTR_MANUAL_OVERRIDE_ACTIVE,
+    ATTR_MANUAL_OVERRIDE_ENDS_AT,
+    ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE,
+    ATTR_MANUAL_OVERRIDE_TERMINATION_TYPE,
     ATTR_NEXT_CHANGE_AT,
     ATTR_OVERRIDE_ENDS_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
     ATTR_SCHEDULE_HOME_END,
     ATTR_SCHEDULE_HOME_START,
+    ATTR_SUPPORTED_ROOM_ACTIONS,
     ATTR_WINDOW_ENTITY_ID,
     DOMAIN,
 )
 from .domain import (
     ClimateCapabilities,
     EffectiveTarget,
+    ManualOverride,
     resolve_regulation_state,
     resolve_window_action,
 )
@@ -55,6 +63,8 @@ ACTIVE_CONTEXT_FALLBACK: Final = "fallback"
 ACTIVE_CONTEXT_MANUAL_OVERRIDE: Final = "manual_override"
 ACTIVE_CONTEXT_SCHEDULE: Final = "schedule"
 ACTIVE_CONTEXT_WINDOW_OVERRIDE: Final = "window_override"
+ROOM_ACTION_CLEAR_MANUAL_OVERRIDE: Final = "clear_manual_override"
+ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION: Final = "set_manual_override_duration"
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -187,14 +197,25 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
             return None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str]:
+    def extra_state_attributes(self) -> dict[str, object]:
         """Expose sparse explanatory profile context."""
+        manual_override = self._manual_override
+        supported_room_actions = _supported_room_actions(manual_override)
         attrs = {
             ATTR_ACTIVE_CONTROL_CONTEXT: self._active_control_context,
+            ATTR_SUPPORTED_ROOM_ACTIONS: supported_room_actions,
+            ATTR_CAN_SET_OVERRIDE: _can_set_manual_override_duration(supported_room_actions),
+            ATTR_CAN_CLEAR_OVERRIDE: manual_override is not None,
+            ATTR_MANUAL_OVERRIDE_ACTIVE: manual_override is not None,
             ATTR_PRIMARY_CLIMATE_ENTITY_ID: self._room_config.primary_climate_entity_id,
             ATTR_SCHEDULE_HOME_START: self._room_config.schedule_home_start,
             ATTR_SCHEDULE_HOME_END: self._room_config.schedule_home_end,
         }
+        if manual_override is not None:
+            attrs[ATTR_MANUAL_OVERRIDE_TARGET_TEMPERATURE] = manual_override.target_temperature
+            attrs[ATTR_MANUAL_OVERRIDE_TERMINATION_TYPE] = manual_override.termination_type
+            if manual_override.ends_at is not None:
+                attrs[ATTR_MANUAL_OVERRIDE_ENDS_AT] = manual_override.ends_at.isoformat()
         if self._room_config.humidity_entity_id:
             attrs[ATTR_HUMIDITY_ENTITY_ID] = self._room_config.humidity_entity_id
         if self._room_config.window_entity_id:
@@ -450,6 +471,19 @@ def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
     if state is None:
         return False
     return str(state.state) in {"unknown", "unavailable"}
+
+
+def _supported_room_actions(manual_override: ManualOverride | None) -> list[str]:
+    """Return the minimal room action projection supported by this increment."""
+    actions = [ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION]
+    if manual_override is not None:
+        actions.append(ROOM_ACTION_CLEAR_MANUAL_OVERRIDE)
+    return actions
+
+
+def _can_set_manual_override_duration(supported_room_actions: list[str]) -> bool:
+    """Return whether the minimal duration override action is projected."""
+    return ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION in supported_room_actions
 
 
 def _is_open_window_state(state) -> bool:  # type: ignore[no-untyped-def]

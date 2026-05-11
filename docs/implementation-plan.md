@@ -374,6 +374,37 @@ room-management operations required by that GUI slice.
   against `v0.2.0-alpha.37` on the dedicated HA test instance. Reload
   persistence is not covered yet by this runner.
 
+### Increment 3.3c: Room action capability projection
+
+- Scope: add the minimal backend-owned room action capability projection needed
+  by the custom-card Override/Resume flow.
+- Implemented flow: room climate entities expose supported room actions,
+  set/clear capability booleans, active manual override state, target
+  temperature, end timestamp, and termination type. The card renders
+  `Override for 1h` only from `can_set_override`, renders `Resume schedule`
+  only from `can_clear_override`, and displays active override values from
+  backend-owned state. In this increment, `can_set_override` means the backend
+  projects the minimal `set_manual_override_duration` action for the room; it
+  is not a complete policy for all override termination variants.
+- Action contract: the card continues to orchestrate the existing
+  `set_area_override` and `clear_area_override` services. The `area_id` service
+  field still accepts a HA area ID, profile ID, or primary climate entity ID as
+  a transitional room reference; the card uses the primary climate entity ID
+  until a stable frontend room identity exists.
+- Non-scope: no full override wizard, no free duration selector, no fixed
+  end-time UI, no next-schedule-change UI, no until-cleared UI, no broad
+  backend API, no config subentries, no new persistence format, no stable
+  profile-ID migration, and no frontend-owned rule, schedule, or override
+  lifecycle evaluation.
+- Verification focus: backend tests for climate entity capability attributes
+  and runtime override lifecycle projection; Vitest/jsdom tests for active
+  override rendering, capability-gated set/resume actions, mapping of new
+  attributes, and preservation of activation and schedule behavior.
+- Acceptance status: the existing Epic 3 runner reuses the HA preparation,
+  API, and Playwright path. It now covers schedule editing plus GUI
+  Override/Resume, verifying the resulting room climate attributes through the
+  HA API.
+
 ## Epic 4: Reliability, recovery, and Home Assistant surface completion
 
 Goal: make the backend reliable under restart and component failure while

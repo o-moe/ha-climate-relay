@@ -22,6 +22,8 @@ climate control.
   one eligible room through backend-owned WebSocket commands
 - minimal custom-card editing for the existing daily schedule start/end window
   through backend-owned validation and persistence
+- backend-projected room action capabilities for the experimental card's
+  minimal fixed-duration Override/Resume flow
 - required primary-climate failure falls back to the configured fallback
   temperature and exposes `degradation_status = required_component_fallback`
 - optional verbose diagnostic logging
@@ -133,7 +135,10 @@ absolute target temperature, and one termination type:
 Creating a second override for the same area replaces the first. Use
 `climate_relay_core.clear_area_override` to clear the active override. Temporary
 overrides expose `override_ends_at` on the area climate entity; active overrides
-set `active_control_context` to `manual_override`.
+set `active_control_context` to `manual_override`. Room climate entities also
+project minimal action state for the experimental card through attributes such
+as `supported_room_actions`, `can_set_override`, `can_clear_override`, and
+`manual_override_active`.
 
 If a window contact is configured, opening it starts the configured delay. If
 the contact remains open for the full delay, the area climate entity switches
@@ -166,8 +171,9 @@ suppressed as already applied.
 - the experimental card can discover eligible climate/area candidates and
   activate one room with backend defaults and edit that room's daily schedule
   start/end times, but full room configuration is not available yet
-- the experimental card can call the existing override services, but full
-  frontend action capability discovery is not available yet
+- the experimental card supports only a backend-capability-gated one-hour
+  override action and resume action; richer override variants are not available
+  in the card yet
 - weekly schedules, multiple timeblocks, and a full schedule editor are not
   available yet
 

@@ -29,8 +29,16 @@ Increment 3.3b adds minimal editing for the initially supported daily schedule
 window. The card renders backend-owned `schedule_home_start` and
 `schedule_home_end` room attributes, collects edited start/end values, and
 saves through the admin-only backend WebSocket schedule update operation.
-Action capability projection remains open; the quick override control is still
-a fixed one-hour scaffold over the existing services.
+
+Increment 3.3c adds minimal room action capability projection through room
+climate entity attributes. The card renders a fixed-duration `Override for 1h`
+action only when `can_set_override` is true, renders `Resume schedule` only
+when `can_clear_override` is true, and displays active manual override target
+and end values from backend-owned attributes. The card still uses the existing
+override services; it does not evaluate override lifecycle, schedule state, or
+rule priority. For this prototype, `can_set_override` means the backend exposes
+the minimal `set_manual_override_duration` action for the room; it is not yet a
+complete policy for every supported override termination variant.
 
 ### Room overview
 
@@ -128,6 +136,14 @@ A manual override flow shall allow:
 
 The frontend shall invoke backend-owned actions for override creation and
 clearing.
+
+The Increment 3.3c prototype supports only the minimal duration action exposed
+to the card: a fixed one-hour override using the existing set service and a
+resume action using the existing clear service. Free duration selection, fixed
+end time, next-schedule-change termination, until-cleared UI, richer room
+configuration, room update/disable, and persistence/reload acceptance remain
+future work even though the backend service can already represent more
+termination types.
 
 ### Global mode
 

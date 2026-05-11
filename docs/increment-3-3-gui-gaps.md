@@ -17,6 +17,11 @@ Increment 3.3b adds minimal schedule editing for the currently supported daily
 home window. It keeps the backend authoritative for validation, persistence,
 reload, and schedule evaluation.
 
+Increment 3.3c adds minimal room action capability projection on the room
+climate entity. The custom card now renders Override/Resume controls from
+backend-projected action state instead of assuming that a fixed override action
+is always available.
+
 ## Implemented frontend slice
 
 - Lovelace element: `climate-relay-card`
@@ -31,14 +36,23 @@ reload, and schedule evaluation.
   - `degradation_status`
   - `next_change_at`
   - `override_ends_at`
+  - `supported_room_actions`
+  - `can_set_override`
+  - `can_clear_override`
+  - `manual_override_active`
+  - `manual_override_target_temperature`
+  - `manual_override_ends_at`
+  - `manual_override_termination_type`
   - `schedule_home_start`
   - `schedule_home_end`
-- Quick override and resume buttons call the existing
+- Override and resume buttons call the existing
   `climate_relay_core.set_area_override` and
   `climate_relay_core.clear_area_override` services.
-- The quick override button is explicitly labeled as `Override 1h` because the
-  current card uses a temporary fixed one-hour duration scaffold instead of a
-  complete override flow.
+- The set-override button is shown only when `can_set_override` is true. In
+  this increment, `can_set_override` means only that the backend projects the
+  minimal `set_manual_override_duration` action for the room. The card labels
+  that action `Override for 1h` and uses a fixed one-hour duration.
+- The resume button is shown only when `can_clear_override` is true.
 - Candidate discovery uses the `climate_relay_core/room_candidates` WebSocket
   command and returns area/climate candidates with backend-owned availability
   reasons. The command is admin-only because it supports room configuration and
@@ -88,36 +102,49 @@ persistence coverage in real-HA custom-card acceptance.
 
 ### Quick override
 
-The card can set a one-hour duration override through the existing service. The
-backend does not yet expose per-room supported override capabilities or a
-structured active override object for frontend rendering.
+Increment 3.3c projects the minimal override capabilities required by the card
+through room climate entity attributes. The card can set a one-hour duration
+override through the existing service only when `can_set_override` is true. It
+renders active manual override state from backend attributes and does not
+evaluate the override lifecycle itself.
+
+This is not yet a comprehensive override capability policy. The only projected
+set action is `set_manual_override_duration`, which the card currently maps to
+a fixed one-hour duration.
 
 The existing override services currently accept an area ID, profile ID, or
 primary climate entity ID through the `area_id` service field. The card uses the
 room primary climate entity ID as a transitional room reference until a
-dedicated frontend-facing room action contract exists.
+dedicated stable room action reference exists.
+
+Still open: free duration selection, fixed end time, until next schedule
+change, until-cleared UI, structured frontend-facing service errors, and target
+temperature defaults.
 
 ### Clear override / resume schedule
 
 The card can call the existing clear service using the room primary climate
-entity ID. The backend does not yet expose whether clearing is currently
-relevant as a room capability or action state.
+entity ID only when `can_clear_override` is true. Clearing remains backend-owned:
+the frontend does not infer whether an override exists from
+`active_control_context` or timestamps.
 
 ## Follow-up boundary
 
 The next backend work should implement only the missing frontend-facing
-operations discovered by this slice: schedule validation/update, minimal
-schedule editing, action capability projection, room update, and room disable.
+operations discovered by this slice: room update, room disable, richer room
+configuration, and persistence/reload acceptance coverage.
 It should not return to broad backend-only room-management abstraction.
 
 The existing `scripts/run_epic_acceptance.py` acceptance runner now includes an
-Increment 3 schedule-editing path (`--epic 3`) that reuses the existing HA
+Increment 3 schedule-editing and Override/Resume path (`--epic 3`) that reuses the existing HA
 preparation and Playwright mechanisms. It injects the built custom card into
-the HA frontend, edits schedule start/end through the GUI, and verifies the
-updated room state attributes through the HA API. It does not yet perform a
-config-entry reload/restart persistence check for the custom-card flow. The
-runner loads the ignored local `.env.local` file for `HOME_ASSISTANT_TOKEN`
-when the variable is not already exported.
+the HA frontend, edits schedule start/end through the GUI, sets a one-hour
+override through the card, verifies backend-projected override attributes
+through the HA API, clicks `Resume schedule`, and verifies that the manual
+override is no longer active. It does not yet perform a config-entry
+reload/restart persistence check for the custom-card flow. The runner loads the
+ignored local `.env.local` file for `HOME_ASSISTANT_TOKEN` when the variable is
+not already exported.
 
 The schedule-editing path passed locally on 2026-05-10 against
 `v0.2.0-alpha.38` on the dedicated HA test instance.
