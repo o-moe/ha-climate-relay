@@ -27,6 +27,7 @@ from custom_components.climate_relay_core.room_management import (
     activate_room,
     disable_room,
     update_room,
+    update_room_schedule,
 )
 
 
@@ -209,3 +210,29 @@ class RoomManagementTest(TestCase):
         self.assertEqual("08:00:00", result[0][CONF_SCHEDULE_HOME_START])
         self.assertEqual("18:00:00", result[0][CONF_SCHEDULE_HOME_END])
         self.assertNotIn(CONF_SCHEDULE, result[0])
+
+    def test_update_room_schedule_updates_exactly_one_room(self) -> None:
+        office = {**_room("climate.office"), "custom_field": "keep"}
+        bedroom = _room("climate.bedroom", schedule_home_start="07:00:00")
+
+        result = update_room_schedule(
+            [office, bedroom],
+            "climate.office",
+            schedule_home_start="08:30",
+            schedule_home_end="20:45",
+        )
+
+        self.assertEqual("08:30:00", result[0][CONF_SCHEDULE_HOME_START])
+        self.assertEqual("20:45:00", result[0][CONF_SCHEDULE_HOME_END])
+        self.assertEqual("keep", result[0]["custom_field"])
+        self.assertEqual(bedroom, result[1])
+        self.assertEqual("06:00:00", office[CONF_SCHEDULE_HOME_START])
+
+    def test_update_room_schedule_rejects_unknown_room(self) -> None:
+        with self.assertRaises(UnknownRoomReferenceError):
+            update_room_schedule(
+                [_room("climate.office")],
+                "climate.unknown",
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )

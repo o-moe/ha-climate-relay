@@ -31,6 +31,8 @@ from .const import (
     ATTR_NEXT_CHANGE_AT,
     ATTR_OVERRIDE_ENDS_AT,
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
+    ATTR_SCHEDULE_HOME_END,
+    ATTR_SCHEDULE_HOME_START,
     ATTR_WINDOW_ENTITY_ID,
     DOMAIN,
 )
@@ -190,6 +192,8 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
         attrs = {
             ATTR_ACTIVE_CONTROL_CONTEXT: self._active_control_context,
             ATTR_PRIMARY_CLIMATE_ENTITY_ID: self._room_config.primary_climate_entity_id,
+            ATTR_SCHEDULE_HOME_START: self._room_config.schedule_home_start,
+            ATTR_SCHEDULE_HOME_END: self._room_config.schedule_home_end,
         }
         if self._room_config.humidity_entity_id:
             attrs[ATTR_HUMIDITY_ENTITY_ID] = self._room_config.humidity_entity_id

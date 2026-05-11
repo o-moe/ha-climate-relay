@@ -20,6 +20,8 @@ climate control.
 - an experimental `climate-relay-card` frontend scaffold for rendering
   activated room tiles from backend-owned Home Assistant state and activating
   one eligible room through backend-owned WebSocket commands
+- minimal custom-card editing for the existing daily schedule start/end window
+  through backend-owned validation and persistence
 - required primary-climate failure falls back to the configured fallback
   temperature and exposes `degradation_status = required_component_fallback`
 - optional verbose diagnostic logging
@@ -162,11 +164,12 @@ suppressed as already applied.
   later epic concern
 - schedule editing is limited to one daily home window
 - the experimental card can discover eligible climate/area candidates and
-  activate one room with backend defaults, but full room configuration is not
-  available yet
+  activate one room with backend defaults and edit that room's daily schedule
+  start/end times, but full room configuration is not available yet
 - the experimental card can call the existing override services, but full
   frontend action capability discovery is not available yet
-- schedule editing is not available in the custom card yet
+- weekly schedules, multiple timeblocks, and a full schedule editor are not
+  available yet
 
 ## Additional Documentation
 

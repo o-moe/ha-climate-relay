@@ -30,6 +30,8 @@ export type ClimateRelayRoomTile = {
   degradationStatus?: string;
   nextChangeAt?: string;
   overrideEndsAt?: string;
+  scheduleHomeStart?: string;
+  scheduleHomeEnd?: string;
 };
 
 export type RoomCandidate = {
@@ -51,4 +53,14 @@ export type ActivateRoomResult = {
   candidate: RoomCandidate;
   primary_climate_entity_id: string;
   rooms_count: number;
+};
+
+export type DailyScheduleWindow = {
+  schedule_home_start: string;
+  schedule_home_end: string;
+};
+
+export type UpdateRoomScheduleResult = DailyScheduleWindow & {
+  updated: boolean;
+  primary_climate_entity_id: string;
 };

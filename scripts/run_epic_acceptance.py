@@ -42,7 +42,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--epic",
         required=True,
-        choices=("1", "2"),
+        choices=("1", "2", "3"),
         help="Epic acceptance workflow to run.",
     )
     parser.add_argument(
@@ -71,11 +71,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_command(command: list[str], *, env: dict[str, str], description: str) -> None:
+def _run_command(
+    command: list[str],
+    *,
+    env: dict[str, str],
+    description: str,
+    cwd: Path | None = None,
+) -> None:
     print(f"[acceptance] {description}")
     print(f"[acceptance] $ {' '.join(shlex.quote(part) for part in command)}")
     result = subprocess.run(
         command,
+        cwd=cwd,
         env=env,
         check=False,
         text=True,
@@ -141,6 +148,40 @@ def _set_entity_state(
 def _find_epic_2_room_entity(*, base_url: str, token: str) -> str:
     room_entities = _find_epic_2_room_entities(base_url=base_url, token=token)
     return room_entities["climate.virtual_climate_office"]
+
+
+def _find_room_entity_for_primary(
+    *,
+    base_url: str,
+    token: str,
+    primary_climate_entity_id: str,
+    timeout_seconds: float = 20.0,
+) -> str:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        states = _request_json(base_url=base_url, token=token, path="/api/states")
+        if not isinstance(states, list):
+            raise AcceptanceError("Expected /api/states to return a list.")
+        candidates = [
+            state
+            for state in states
+            if isinstance(state, dict)
+            and str(state.get("entity_id", "")).startswith("climate.")
+            and state.get("attributes", {}).get("primary_climate_entity_id")
+            == primary_climate_entity_id
+        ]
+        if len(candidates) == 1:
+            return str(candidates[0]["entity_id"])
+        if len(candidates) > 1:
+            raise AcceptanceError(
+                "Expected exactly one room climate entity for "
+                f"{primary_climate_entity_id}, found {len(candidates)}."
+            )
+        if time.monotonic() >= deadline:
+            raise AcceptanceError(
+                f"Timed out waiting for room climate entity for {primary_climate_entity_id}."
+            )
+        time.sleep(0.5)
 
 
 def _find_epic_2_room_entities(*, base_url: str, token: str) -> dict[str, str]:
@@ -396,6 +437,59 @@ def _prepare_epic_2_profile(*, base_url: str, token: str) -> None:
     time.sleep(5.0)
 
 
+def _prepare_epic_3_profile(*, base_url: str, token: str) -> None:
+    entry_id = _find_config_entry_id(
+        base_url=base_url,
+        token=token,
+        domain="climate_relay_core",
+    )
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path="/api/config/config_entries/options/flow",
+        method="POST",
+        payload={"handler": entry_id},
+    )
+    flow_id = str(flow["flow_id"])
+    flow = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={
+            "person_entity_ids": ["person.bjorn"],
+            "unknown_state_handling": "away",
+            "fallback_temperature": 20.0,
+            "manual_override_reset_enabled": False,
+            "simulation_mode": True,
+            "verbose_logging": False,
+        },
+    )
+    if flow.get("step_id") != "profiles":
+        raise AcceptanceError(f"Expected profiles options step, got {flow!r}.")
+
+    _clear_profiles_in_flow(base_url=base_url, token=token, flow_id=flow_id)
+    _add_epic_2_profile(
+        base_url=base_url,
+        token=token,
+        flow_id=flow_id,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+        window_entity_id=EPIC_2_WINDOW_ENTITIES[0],
+        home_target_temperature=20.0,
+        away_target_temperature=17.0,
+    )
+    result = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/config/config_entries/options/flow/{flow_id}",
+        method="POST",
+        payload={"profile_action": "finish"},
+    )
+    if result.get("type") != "create_entry":
+        raise AcceptanceError(f"Expected profile options to save, got {result!r}.")
+    time.sleep(5.0)
+
+
 def _add_epic_2_profile(
     *,
     base_url: str,
@@ -583,6 +677,120 @@ await expectText("Select exactly one primary climate entity.");
 await selectPrimaryClimate("No Area Fixture");
 await page.getByRole("button", {{ name: "OK", exact: true }}).click();
 await expectText("Assign the primary climate entity to a Home Assistant area first.");
+}}""".strip()
+
+
+def _gui_epic_3_schedule_card_code(base_url: str, card_bundle_path: Path) -> str:
+    return f"""async () => {{
+const baseUrl = {base_url!r};
+const cardBundlePath = {str(card_bundle_path)!r};
+
+async function ensureLoggedIn() {{
+  await page.goto(baseUrl);
+  await page.waitForLoadState("domcontentloaded");
+  if (page.url().includes("/auth/authorize")) {{
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).waitFor({{ timeout: 20000 }});
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).fill("codex");
+    await page.getByRole("textbox", {{ name: "Passwort" }}).fill("codex");
+    await page.getByRole("button", {{ name: "Anmelden" }}).click();
+  }}
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {{
+    await page.waitForTimeout(1000);
+    if (!page.url().includes("/auth/authorize")) {{
+      return;
+    }}
+  }}
+  throw new Error("HA login did not complete.");
+}}
+
+async function mountCard() {{
+  await page.addScriptTag({{ path: cardBundlePath, type: "module" }});
+  await page.evaluate(() => {{
+    const existing = document.querySelector("#climate-relay-acceptance-root");
+    existing?.remove();
+    const root = document.createElement("div");
+    root.id = "climate-relay-acceptance-root";
+    root.style.position = "fixed";
+    root.style.inset = "24px";
+    root.style.zIndex = "10000";
+    root.style.overflow = "auto";
+    root.style.background = "var(--primary-background-color, white)";
+    document.body.append(root);
+
+    const card = document.createElement("climate-relay-card");
+    card.setConfig({{ title: "Climate Relay Acceptance" }});
+    root.append(card);
+
+    const updateHass = () => {{
+      const homeAssistant = document.querySelector("home-assistant");
+      if (homeAssistant?.hass) {{
+        card.hass = homeAssistant.hass;
+      }}
+    }};
+    updateHass();
+    window.__climateRelayAcceptanceInterval = window.setInterval(updateHass, 500);
+  }});
+}}
+
+async function waitForText(text) {{
+  await page.waitForFunction(
+    (expected) => document.body && document.body.innerText.includes(expected),
+    text,
+    {{ timeout: 20000 }},
+  );
+}}
+
+async function waitForCardText(text) {{
+  await page.waitForFunction(
+    (expected) => {{
+      const card = document.querySelector("climate-relay-card");
+      return card?.shadowRoot?.textContent?.includes(expected);
+    }},
+    text,
+    {{ timeout: 20000 }},
+  );
+}}
+
+async function setSchedule(labelSuffix, value) {{
+  await page.evaluate(
+    ([inputLabelSuffix, inputValue]) => {{
+      const card = document.querySelector("climate-relay-card");
+      const input = Array.from(card.shadowRoot.querySelectorAll("input")).find(
+        (candidate) => candidate.getAttribute("aria-label")?.endsWith(inputLabelSuffix),
+      );
+      if (!input) {{
+        throw new Error(`Missing schedule input ending with ${{inputLabelSuffix}}`);
+      }}
+      input.value = inputValue;
+      input.dispatchEvent(new InputEvent("input", {{ bubbles: true, composed: true }}));
+    }},
+    [labelSuffix, value],
+  );
+}}
+
+async function clickSave() {{
+  await page.evaluate(() => {{
+    const card = document.querySelector("climate-relay-card");
+    const button = Array.from(card.shadowRoot.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent.includes("Save"),
+    );
+    if (!button) {{
+      throw new Error("Missing schedule Save button.");
+    }}
+    button.click();
+  }});
+}}
+
+await ensureLoggedIn();
+await mountCard();
+await waitForCardText("Climate Relay Acceptance");
+await waitForCardText("Schedule start");
+await waitForCardText("06:00:00");
+await setSchedule(" schedule start", "07:15");
+await setSchedule(" schedule end", "21:45");
+await clickSave();
+await waitForCardText("Schedule saved. Waiting for Home Assistant state to update.");
 }}""".strip()
 
 
@@ -1501,6 +1709,132 @@ def _run_epic_2(
     )
 
 
+def _run_epic_3(
+    *,
+    base_url: str,
+    skip_gui: bool,
+    artifact_dir: Path,
+    install_version: str | None,
+) -> None:
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        raise AcceptanceError(f"{TOKEN_ENV_VAR} must be set.")
+
+    env = os.environ.copy()
+    prepare_command = [
+        sys.executable,
+        "scripts/ha_prepare_test_instance.py",
+        "--base-url",
+        base_url,
+    ]
+    if install_version is not None:
+        prepare_command.extend(
+            [
+                "--install-version",
+                f"update.climaterelaycore_update={install_version}",
+            ]
+        )
+    steps = [
+        (prepare_command, "Prepare HA test instance"),
+        (
+            [
+                sys.executable,
+                "scripts/ha_smoke_test.py",
+                "--expect-area-override-services",
+                "--set-initial-mode",
+                "home",
+                "--expect-select-friendly-name",
+                "Climate Relay Presence Control",
+                "--expect-effective-presence",
+                "home",
+                "--expect-unknown-state-handling",
+                "away",
+                "--expect-simulation-mode",
+                "on",
+                "--expect-fallback-temperature",
+                "20.0",
+                "--base-url",
+                base_url,
+            ],
+            "Run authenticated HA base smoke test",
+        ),
+    ]
+    for command, description in steps:
+        _run_command(command, env=env, description=description)
+
+    print("[acceptance] Prepare Increment 3 schedule-editing profile through API")
+    _prepare_epic_3_profile(base_url=base_url, token=token)
+    room_entity_id = _find_room_entity_for_primary(
+        base_url=base_url,
+        token=token,
+        primary_climate_entity_id=EPIC_2_PRIMARY_CLIMATES[0],
+    )
+    _wait_for_room_attributes(
+        base_url=base_url,
+        token=token,
+        entity_id=room_entity_id,
+        expected_attributes={
+            "schedule_home_start": "06:00:00",
+            "schedule_home_end": "22:00:00",
+        },
+    )
+
+    if skip_gui:
+        return
+
+    _run_command(
+        ["npm", "run", "build"],
+        env=env,
+        description="Build custom card bundle for GUI acceptance",
+        cwd=Path("frontend"),
+    )
+    card_bundle_path = (Path.cwd() / "frontend" / "dist" / "climate-relay-card.js").resolve()
+    pw_env = _playwright_env()
+    pwcli = pw_env["PWCLI"]
+    session = f"e3{os.getpid()}"
+    try:
+        _run_command(
+            [pwcli, f"-s={session}", "open", base_url],
+            env=pw_env,
+            description="Open Playwright browser session",
+        )
+        _run_command(
+            [
+                pwcli,
+                f"-s={session}",
+                "run-code",
+                _gui_epic_3_schedule_card_code(base_url, card_bundle_path),
+            ],
+            env=pw_env,
+            description="Run Increment 3 schedule-editing custom-card GUI regression",
+        )
+    except AcceptanceError:
+        _capture_gui_artifact(
+            pwcli=pwcli,
+            session=session,
+            env=pw_env,
+            artifact_dir=artifact_dir,
+            name="epic-3-schedule",
+        )
+        raise
+    finally:
+        subprocess.run(
+            [pwcli, f"-s={session}", "close"],
+            env=pw_env,
+            check=False,
+        )
+
+    _wait_for_room_attributes(
+        base_url=base_url,
+        token=token,
+        entity_id=room_entity_id,
+        expected_attributes={
+            "schedule_home_start": "07:15:00",
+            "schedule_home_end": "21:45:00",
+        },
+    )
+
+
 def main() -> int:
     _load_local_env_file()
     args = _build_parser().parse_args()
@@ -1514,6 +1848,13 @@ def main() -> int:
         )
     if args.epic == "2":
         _run_epic_2(
+            base_url=args.base_url,
+            skip_gui=args.skip_gui,
+            artifact_dir=artifact_dir,
+            install_version=args.install_version,
+        )
+    if args.epic == "3":
+        _run_epic_3(
             base_url=args.base_url,
             skip_gui=args.skip_gui,
             artifact_dir=artifact_dir,

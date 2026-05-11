@@ -23,17 +23,23 @@ from custom_components.climate_relay_core.frontend_api import (
     ERROR_AREA_ALREADY_ACTIVE,
     ERROR_CONFIG_ENTRY_UPDATE_FAILED,
     ERROR_INVALID_ENTITY_DOMAIN,
+    ERROR_INVALID_SCHEDULE_TIME,
     ERROR_MULTIPLE_CONFIG_ENTRIES,
     ERROR_NO_CONFIG_ENTRY,
     ERROR_PRIMARY_CLIMATE_ALREADY_ACTIVE,
     ERROR_PRIMARY_CLIMATE_AREA_REQUIRED,
+    ERROR_ROOM_REFERENCE_REQUIRED,
+    ERROR_SCHEDULE_WINDOW_REQUIRED,
     ERROR_UNKNOWN_CANDIDATE,
+    ERROR_UNKNOWN_ROOM,
     FrontendApiError,
     async_activate_room_from_frontend,
     async_register_websocket_commands,
+    async_update_room_schedule_from_frontend,
     discover_room_candidates,
     websocket_activate_room,
     websocket_room_candidates,
+    websocket_update_room_schedule,
 )
 from custom_components.climate_relay_core.runtime import AreaReference
 
@@ -199,7 +205,7 @@ class FrontendApiTests(IsolatedAsyncioTestCase):
         ) as register_command:
             async_register_websocket_commands(hass)
 
-        self.assertEqual(2, register_command.call_count)
+        self.assertEqual(3, register_command.call_count)
 
     async def test_activation_updates_config_entry_options_and_relies_on_listener_reload(
         self,
@@ -415,6 +421,131 @@ class FrontendApiTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(ERROR_NO_CONFIG_ENTRY, context.exception.code)
 
+    async def test_update_schedule_updates_only_target_room_and_persists_options(self) -> None:
+        office = {**_room("climate.office"), "custom_field": "preserved"}
+        bedroom = _room("climate.bedroom")
+        hass = _hass_with_entities("climate.office", "climate.bedroom")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [office, bedroom]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+        hass.config_entries.async_reload = AsyncMock()
+
+        result = await async_update_room_schedule_from_frontend(
+            hass,
+            primary_climate_entity_id="climate.office",
+            schedule_home_start="08:15",
+            schedule_home_end="20:45",
+        )
+
+        self.assertTrue(result["updated"])
+        self.assertEqual("08:15:00", result[CONF_SCHEDULE_HOME_START])
+        self.assertEqual("20:45:00", result[CONF_SCHEDULE_HOME_END])
+        hass.config_entries.async_update_entry.assert_called_once()
+        updated_options = hass.config_entries.async_update_entry.call_args.kwargs["options"]
+        self.assertEqual("08:15:00", updated_options[CONF_ROOMS][0][CONF_SCHEDULE_HOME_START])
+        self.assertEqual("20:45:00", updated_options[CONF_ROOMS][0][CONF_SCHEDULE_HOME_END])
+        self.assertEqual("preserved", updated_options[CONF_ROOMS][0]["custom_field"])
+        self.assertEqual(bedroom, updated_options[CONF_ROOMS][1])
+        hass.config_entries.async_reload.assert_not_called()
+
+    async def test_update_schedule_rejects_missing_room_reference(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [_room("climate.office")]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id=None,
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )
+
+        self.assertEqual(ERROR_ROOM_REFERENCE_REQUIRED, context.exception.code)
+
+    async def test_update_schedule_requires_one_loaded_config_entry(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        hass.data = {DOMAIN: {}}
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.office",
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )
+
+        self.assertEqual(ERROR_NO_CONFIG_ENTRY, context.exception.code)
+
+        hass.data = {DOMAIN: {"entry-1": {}, "entry-2": {}}}
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.office",
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )
+
+        self.assertEqual(ERROR_MULTIPLE_CONFIG_ENTRIES, context.exception.code)
+
+    async def test_update_schedule_rejects_unknown_room(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [_room("climate.office")]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.unknown",
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )
+
+        self.assertEqual(ERROR_UNKNOWN_ROOM, context.exception.code)
+
+    async def test_update_schedule_rejects_invalid_time_and_identical_window(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [_room("climate.office")]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.office",
+                schedule_home_start="07:15:30",
+                schedule_home_end="20:00",
+            )
+        self.assertEqual(ERROR_INVALID_SCHEDULE_TIME, context.exception.code)
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.office",
+                schedule_home_start="08:00",
+                schedule_home_end="08:00:00",
+            )
+        self.assertEqual(ERROR_SCHEDULE_WINDOW_REQUIRED, context.exception.code)
+
+    async def test_update_schedule_maps_config_entry_update_failure(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [_room("climate.office")]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+        hass.config_entries.async_update_entry.side_effect = RuntimeError("update failed")
+
+        with self.assertRaises(FrontendApiError) as context:
+            await async_update_room_schedule_from_frontend(
+                hass,
+                primary_climate_entity_id="climate.office",
+                schedule_home_start="08:00",
+                schedule_home_end="20:00",
+            )
+
+        self.assertEqual(ERROR_CONFIG_ENTRY_UPDATE_FAILED, context.exception.code)
+
         hass.data = {DOMAIN: {"entry-1": {}, "entry-2": {}}}
         with self.assertRaises(FrontendApiError) as context:
             await async_activate_room_from_frontend(hass, candidate_id="climate.office")
@@ -440,6 +571,8 @@ class FrontendApiTests(IsolatedAsyncioTestCase):
             websocket_room_candidates(hass, connection, {"id": 1})
         with self.assertRaises(Unauthorized):
             websocket_activate_room(hass, connection, {"id": 2})
+        with self.assertRaises(Unauthorized):
+            websocket_update_room_schedule(hass, connection, {"id": 3})
 
     async def test_websocket_room_candidates_sends_result(self) -> None:
         hass = _hass_with_entities("climate.office")
@@ -493,6 +626,39 @@ class FrontendApiTests(IsolatedAsyncioTestCase):
         error_connection = Mock()
         await websocket_activate_room.__wrapped__.__wrapped__(hass, error_connection, {"id": 10})
         error_connection.send_error.assert_called_once()
+
+    async def test_websocket_update_room_schedule_sends_result_and_structured_error(self) -> None:
+        hass = _hass_with_entities("climate.office")
+        entry = _entry(entry_id="entry-1", options={CONF_ROOMS: [_room("climate.office")]})
+        hass.data = {DOMAIN: {"entry-1": {}}}
+        hass.config_entries.async_entries.return_value = [entry]
+        connection = Mock()
+
+        await websocket_update_room_schedule.__wrapped__.__wrapped__(
+            hass,
+            connection,
+            {
+                "id": 11,
+                "primary_climate_entity_id": "climate.office",
+                CONF_SCHEDULE_HOME_START: "07:00",
+                CONF_SCHEDULE_HOME_END: "21:00",
+            },
+        )
+
+        connection.send_result.assert_called_once()
+        self.assertEqual(11, connection.send_result.call_args.args[0])
+
+        error_connection = Mock()
+        await websocket_update_room_schedule.__wrapped__.__wrapped__(
+            hass,
+            error_connection,
+            {"id": 12, "primary_climate_entity_id": "climate.office"},
+        )
+        error_connection.send_error.assert_called_once_with(
+            12,
+            ERROR_SCHEDULE_WINDOW_REQUIRED,
+            "Schedule start and end are required and must be different.",
+        )
 
 
 def _hass_with_entities(*entity_ids: str) -> Mock:

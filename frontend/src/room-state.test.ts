@@ -33,6 +33,8 @@ describe("extractClimateRelayRooms", () => {
           degradation_status: "optional_sensor_unavailable",
           next_change_at: "2026-05-10T22:00:00+02:00",
           override_ends_at: "2026-05-10T18:00:00+02:00",
+          schedule_home_start: "06:00:00",
+          schedule_home_end: "22:00:00",
         },
       },
     };
@@ -48,6 +50,8 @@ describe("extractClimateRelayRooms", () => {
         degradationStatus: "optional_sensor_unavailable",
         nextChangeAt: "2026-05-10T22:00:00+02:00",
         overrideEndsAt: "2026-05-10T18:00:00+02:00",
+        scheduleHomeStart: "06:00:00",
+        scheduleHomeEnd: "22:00:00",
       },
     ]);
   });

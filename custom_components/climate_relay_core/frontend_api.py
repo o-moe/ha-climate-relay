@@ -16,17 +16,29 @@ from .const import (
     ATTR_PRIMARY_CLIMATE_ENTITY_ID,
     CONF_PRIMARY_CLIMATE_ENTITY_ID,
     CONF_ROOMS,
+    CONF_SCHEDULE_HOME_END,
+    CONF_SCHEDULE_HOME_START,
     DOMAIN,
 )
-from .room_config import default_room_data, normalize_rooms
+from .room_config import (
+    InvalidScheduleTimeError,
+    ScheduleWindowRequiredError,
+    default_room_data,
+    normalize_rooms,
+)
 from .runtime import _resolve_area_reference
 
 COMMAND_ROOM_CANDIDATES = f"{DOMAIN}/room_candidates"
 COMMAND_ACTIVATE_ROOM = f"{DOMAIN}/activate_room"
+COMMAND_UPDATE_ROOM_SCHEDULE = f"{DOMAIN}/update_room_schedule"
 
 ERROR_NO_CONFIG_ENTRY = "no_config_entry"
 ERROR_MULTIPLE_CONFIG_ENTRIES = "multiple_config_entries"
 ERROR_UNKNOWN_CANDIDATE = "unknown_candidate"
+ERROR_UNKNOWN_ROOM = "unknown_room"
+ERROR_ROOM_REFERENCE_REQUIRED = "room_reference_required"
+ERROR_INVALID_SCHEDULE_TIME = "invalid_schedule_time"
+ERROR_SCHEDULE_WINDOW_REQUIRED = "schedule_window_required"
 ERROR_PRIMARY_CLIMATE_AREA_REQUIRED = "primary_climate_area_required"
 ERROR_PRIMARY_CLIMATE_ALREADY_ACTIVE = "primary_climate_already_active"
 ERROR_AREA_ALREADY_ACTIVE = "area_already_active"
@@ -63,6 +75,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register frontend-facing WebSocket commands."""
     websocket_api.async_register_command(hass, websocket_room_candidates)
     websocket_api.async_register_command(hass, websocket_activate_room)
+    websocket_api.async_register_command(hass, websocket_update_room_schedule)
 
 
 @callback
@@ -109,6 +122,37 @@ async def websocket_activate_room(
             hass,
             candidate_id=msg.get("candidate_id"),
             primary_climate_entity_id=msg.get("primary_climate_entity_id"),
+        )
+    except FrontendApiError as err:
+        connection.send_error(msg["id"], err.code, err.message)
+        return
+
+    connection.send_result(msg["id"], result)
+
+
+@callback
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): COMMAND_UPDATE_ROOM_SCHEDULE,
+        vol.Optional("primary_climate_entity_id"): str,
+        vol.Optional(CONF_SCHEDULE_HOME_START): object,
+        vol.Optional(CONF_SCHEDULE_HOME_END): object,
+    }
+)
+@websocket_api.async_response
+async def websocket_update_room_schedule(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Handle one-room schedule update requests from the custom card."""
+    try:
+        result = await async_update_room_schedule_from_frontend(
+            hass,
+            primary_climate_entity_id=msg.get("primary_climate_entity_id"),
+            schedule_home_start=msg.get(CONF_SCHEDULE_HOME_START),
+            schedule_home_end=msg.get(CONF_SCHEDULE_HOME_END),
         )
     except FrontendApiError as err:
         connection.send_error(msg["id"], err.code, err.message)
@@ -188,6 +232,60 @@ async def async_activate_room_from_frontend(
     }
 
 
+async def async_update_room_schedule_from_frontend(
+    hass: HomeAssistant,
+    *,
+    primary_climate_entity_id: str | None,
+    schedule_home_start: Any,
+    schedule_home_end: Any,
+) -> dict[str, Any]:
+    """Update one room's daily schedule through the existing room options format."""
+    entry = _require_single_loaded_entry(hass)
+    if not primary_climate_entity_id:
+        raise FrontendApiError(
+            ERROR_ROOM_REFERENCE_REQUIRED,
+            "A primary climate room reference is required.",
+        )
+
+    rooms = _stored_room_options(entry)
+    try:
+        updated_rooms = room_management.update_room_schedule(
+            rooms,
+            primary_climate_entity_id,
+            schedule_home_start=schedule_home_start,
+            schedule_home_end=schedule_home_end,
+        )
+    except room_management.UnknownRoomReferenceError as err:
+        raise FrontendApiError(ERROR_UNKNOWN_ROOM, "Unknown room.") from err
+    except ScheduleWindowRequiredError as err:
+        raise FrontendApiError(
+            ERROR_SCHEDULE_WINDOW_REQUIRED,
+            "Schedule start and end are required and must be different.",
+        ) from err
+    except InvalidScheduleTimeError as err:
+        raise FrontendApiError(ERROR_INVALID_SCHEDULE_TIME, "Invalid schedule time.") from err
+
+    options = {**entry.options, CONF_ROOMS: updated_rooms}
+    try:
+        hass.config_entries.async_update_entry(entry, options=options)
+    except Exception as err:
+        raise FrontendApiError(
+            ERROR_CONFIG_ENTRY_UPDATE_FAILED,
+            "Failed to persist room schedule.",
+        ) from err
+
+    return {
+        "updated": True,
+        "primary_climate_entity_id": primary_climate_entity_id,
+        CONF_SCHEDULE_HOME_START: updated_rooms[
+            _room_index(updated_rooms, primary_climate_entity_id)
+        ][CONF_SCHEDULE_HOME_START],
+        CONF_SCHEDULE_HOME_END: updated_rooms[
+            _room_index(updated_rooms, primary_climate_entity_id)
+        ][CONF_SCHEDULE_HOME_END],
+    }
+
+
 def discover_room_candidates(
     hass: HomeAssistant,
     entry: Any,
@@ -238,6 +336,22 @@ def _require_single_loaded_entry(hass: HomeAssistant) -> Any:
         if entry.entry_id == entry_id:
             return entry
     raise FrontendApiError(ERROR_NO_CONFIG_ENTRY, "No loaded Climate Relay config entry.")
+
+
+def _stored_room_options(entry: Any) -> list[dict[str, Any]]:
+    raw_rooms = entry.options.get(CONF_ROOMS)
+    if raw_rooms is None:
+        raw_rooms = entry.data.get(CONF_ROOMS)
+    if not isinstance(raw_rooms, list):
+        return []
+    return [dict(room) for room in raw_rooms if isinstance(room, dict)]
+
+
+def _room_index(rooms: list[dict[str, Any]], primary_climate_entity_id: str) -> int:
+    for index, room in enumerate(rooms):
+        if room.get(CONF_PRIMARY_CLIMATE_ENTITY_ID) == primary_climate_entity_id:
+            return index
+    raise FrontendApiError(ERROR_UNKNOWN_ROOM, "Unknown room.")
 
 
 def _climate_entity_ids(hass: HomeAssistant) -> set[str]:

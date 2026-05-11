@@ -18,6 +18,9 @@ from custom_components.climate_relay_core.const import (
     DEFAULT_WINDOW_OPEN_DELAY_SECONDS,
 )
 from custom_components.climate_relay_core.room_config import (
+    InvalidScheduleTimeError,
+    ScheduleWindowRequiredError,
+    normalize_daily_schedule_window,
     normalize_non_negative_int,
     normalize_optional_float,
     normalize_room_options,
@@ -105,3 +108,41 @@ class RoomConfigTest(TestCase):
     def test_schedule_window_validation_rejects_identical_values(self) -> None:
         self.assertFalse(validate_room_schedule_window("08:00:00", "08:00:00"))
         self.assertTrue(validate_room_schedule_window("08:00:00", "20:00:00"))
+
+    def test_daily_schedule_validation_accepts_valid_window(self) -> None:
+        self.assertEqual(
+            {
+                CONF_SCHEDULE_HOME_START: "07:15:00",
+                CONF_SCHEDULE_HOME_END: "22:00:00",
+            },
+            normalize_daily_schedule_window("07:15", "22:00:00"),
+        )
+
+    def test_daily_schedule_validation_accepts_zero_second_precision(self) -> None:
+        self.assertEqual(
+            {
+                CONF_SCHEDULE_HOME_START: "07:15:00",
+                CONF_SCHEDULE_HOME_END: "22:00:00",
+            },
+            normalize_daily_schedule_window("07:15:00.000000", "22:00:00"),
+        )
+
+    def test_daily_schedule_validation_rejects_identical_start_and_end(self) -> None:
+        with self.assertRaises(ScheduleWindowRequiredError):
+            normalize_daily_schedule_window("08:00", "08:00:00")
+
+    def test_daily_schedule_validation_rejects_invalid_time_values(self) -> None:
+        with self.assertRaises(InvalidScheduleTimeError):
+            normalize_daily_schedule_window("25:00", "22:00")
+
+    def test_daily_schedule_validation_rejects_second_level_precision(self) -> None:
+        with self.assertRaises(InvalidScheduleTimeError):
+            normalize_daily_schedule_window("07:15:30", "22:00")
+
+    def test_daily_schedule_validation_rejects_non_zero_microsecond_precision(self) -> None:
+        with self.assertRaises(InvalidScheduleTimeError):
+            normalize_daily_schedule_window("07:15:00.000001", "22:00")
+
+    def test_daily_schedule_validation_rejects_missing_window_endpoint(self) -> None:
+        with self.assertRaises(ScheduleWindowRequiredError):
+            normalize_daily_schedule_window(None, "22:00")

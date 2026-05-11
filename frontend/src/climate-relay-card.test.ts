@@ -36,6 +36,8 @@ describe("climate-relay-card", () => {
     expect(rendered).toContain("optional_sensor_unavailable");
     expect(rendered).toContain("2026-05-10T22:00:00+02:00");
     expect(rendered).toContain("2026-05-10T19:30:00+02:00");
+    expect(rendered).toContain("06:00:00");
+    expect(rendered).toContain("22:00:00");
     expect(rendered).toContain("Override 1h");
   });
 
@@ -158,9 +160,8 @@ describe("climate-relay-card", () => {
     element.hass = mockHass(callService);
 
     await element.updateComplete;
-    const buttons = element.shadowRoot?.querySelectorAll("button");
-    buttons?.[0]?.dispatchEvent(new MouseEvent("click"));
-    buttons?.[1]?.dispatchEvent(new MouseEvent("click"));
+    clickButton(element, "Override 1h");
+    clickButton(element, "Resume");
 
     expect(callService).toHaveBeenCalledWith("climate_relay_core", "set_area_override", {
       area_id: "climate.office",
@@ -173,7 +174,52 @@ describe("climate-relay-card", () => {
     });
   });
 
-  it("documents that schedule validation stays backend-owned and unimplemented here", async () => {
+  it("calls backend schedule update command when user saves schedule", async () => {
+    const sendMessagePromise = vi
+      .fn()
+      .mockResolvedValueOnce({ candidates: [] })
+      .mockResolvedValueOnce({
+        updated: true,
+        primary_climate_entity_id: "climate.office",
+        schedule_home_start: "07:30:00",
+        schedule_home_end: "21:15:00",
+      });
+    const element = createCard();
+    element.hass = mockHass(undefined, sendMessagePromise);
+
+    await waitForUpdates(element);
+    setInputValue(element, "Office schedule start", "07:30");
+    setInputValue(element, "Office schedule end", "21:15");
+    clickButton(element, "Save");
+    await waitForUpdates(element);
+
+    expect(sendMessagePromise).toHaveBeenCalledWith({
+      type: "climate_relay_core/update_room_schedule",
+      primary_climate_entity_id: "climate.office",
+      schedule_home_start: "07:30",
+      schedule_home_end: "21:15",
+    });
+    expect(textContent(element)).toContain("Schedule saved. Waiting for Home Assistant state to update.");
+  });
+
+  it("shows backend error for rejected schedule update", async () => {
+    const sendMessagePromise = vi
+      .fn()
+      .mockResolvedValueOnce({ candidates: [] })
+      .mockRejectedValueOnce(new Error("Schedule start and end are required and must be different."));
+    const element = createCard();
+    element.hass = mockHass(undefined, sendMessagePromise);
+
+    await waitForUpdates(element);
+    clickButton(element, "Save");
+    await waitForUpdates(element);
+
+    expect(textContent(element)).toContain(
+      "Schedule start and end are required and must be different.",
+    );
+  });
+
+  it("documents that schedule evaluation stays backend-owned", async () => {
     const element = createCard();
     element.hass = mockHass();
 
@@ -181,7 +227,7 @@ describe("climate-relay-card", () => {
 
     const rendered = textContent(element);
     expect(rendered).toContain("Room activation is available for eligible primary climate candidates");
-    expect(rendered).toContain("Schedule editing needs backend-owned schedule validation");
+    expect(rendered).toContain("Daily schedule start/end editing is available");
     expect(rendered).toContain("Override 1h remains a temporary fixed-duration scaffold");
   });
 });
@@ -215,6 +261,8 @@ function mockHass(
           degradation_status: "optional_sensor_unavailable",
           next_change_at: "2026-05-10T22:00:00+02:00",
           override_ends_at: "2026-05-10T19:30:00+02:00",
+          schedule_home_start: "06:00:00",
+          schedule_home_end: "22:00:00",
         },
       },
     },
@@ -229,4 +277,25 @@ async function waitForUpdates(element: ClimateRelayCard): Promise<void> {
   await element.updateComplete;
   await Promise.resolve();
   await element.updateComplete;
+}
+
+function setInputValue(element: ClimateRelayCard, label: string, value: string): void {
+  const input = Array.from(element.shadowRoot?.querySelectorAll("input") ?? []).find(
+    (candidate) => candidate.getAttribute("aria-label") === label,
+  );
+  if (!input) {
+    throw new Error(`Missing input: ${label}`);
+  }
+  input.value = value;
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+}
+
+function clickButton(element: ClimateRelayCard, label: string): void {
+  const button = Array.from(element.shadowRoot?.querySelectorAll("button") ?? []).find(
+    (candidate) => candidate.textContent?.includes(label),
+  );
+  if (!button) {
+    throw new Error(`Missing button: ${label}`);
+  }
+  button.dispatchEvent(new MouseEvent("click"));
 }

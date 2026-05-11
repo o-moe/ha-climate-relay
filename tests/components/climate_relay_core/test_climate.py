@@ -598,6 +598,14 @@ class RoomClimateEntityTests(IsolatedAsyncioTestCase):
         self.assertIsNone(entity.current_humidity)
         self.assertNotIn(ATTR_HUMIDITY_ENTITY_ID, entity.extra_state_attributes)
         self.assertNotIn(ATTR_WINDOW_ENTITY_ID, entity.extra_state_attributes)
+        self.assertEqual(
+            "06:00:00",
+            entity.extra_state_attributes["schedule_home_start"],
+        )
+        self.assertEqual(
+            "22:00:00",
+            entity.extra_state_attributes["schedule_home_end"],
+        )
 
     async def test_entity_registers_runtime_and_state_listeners(self) -> None:
         entity = self._build_entity(
