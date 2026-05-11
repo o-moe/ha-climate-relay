@@ -120,4 +120,4 @@ runner loads the ignored local `.env.local` file for `HOME_ASSISTANT_TOKEN`
 when the variable is not already exported.
 
 The schedule-editing path passed locally on 2026-05-10 against
-`v0.2.0-alpha.37` on the dedicated HA test instance.
+`v0.2.0-alpha.38` on the dedicated HA test instance.
