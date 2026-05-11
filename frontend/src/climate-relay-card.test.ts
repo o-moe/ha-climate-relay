@@ -38,7 +38,9 @@ describe("climate-relay-card", () => {
     expect(rendered).toContain("2026-05-10T19:30:00+02:00");
     expect(rendered).toContain("06:00:00");
     expect(rendered).toContain("22:00:00");
-    expect(rendered).toContain("Override 1h");
+    expect(rendered).toContain("Manual override active");
+    expect(rendered).toContain("Target 21.5 °C");
+    expect(rendered).toContain("Resume schedule");
   });
 
   it("renders candidate section when backend returns candidates", async () => {
@@ -154,14 +156,23 @@ describe("climate-relay-card", () => {
     expect(textContent(element)).toContain("Home Assistant area is already activated.");
   });
 
-  it("orchestrates existing backend override services without owning rule logic", async () => {
+  it("calls existing set override service only when backend capability allows it", async () => {
     const callService = vi.fn();
     const element = createCard();
-    element.hass = mockHass(callService);
+    element.hass = mockHass(callService, undefined, {
+      active_control_context: "schedule",
+      supported_room_actions: ["set_manual_override_duration"],
+      can_set_override: true,
+      can_clear_override: false,
+      manual_override_active: false,
+      manual_override_target_temperature: undefined,
+      manual_override_ends_at: undefined,
+      manual_override_termination_type: undefined,
+      override_ends_at: undefined,
+    });
 
     await element.updateComplete;
-    clickButton(element, "Override 1h");
-    clickButton(element, "Resume");
+    clickButton(element, "Override for 1h");
 
     expect(callService).toHaveBeenCalledWith("climate_relay_core", "set_area_override", {
       area_id: "climate.office",
@@ -169,9 +180,53 @@ describe("climate-relay-card", () => {
       termination_type: "duration",
       duration_minutes: 60,
     });
+  });
+
+  it("calls existing clear override service only when backend capability allows it", async () => {
+    const callService = vi.fn();
+    const element = createCard();
+    element.hass = mockHass(callService);
+
+    await element.updateComplete;
+    clickButton(element, "Resume schedule");
+
     expect(callService).toHaveBeenCalledWith("climate_relay_core", "clear_area_override", {
       area_id: "climate.office",
     });
+  });
+
+  it("hides override actions when backend capabilities disallow them", async () => {
+    const callService = vi.fn();
+    const element = createCard();
+    element.hass = mockHass(callService, undefined, {
+      active_control_context: "schedule",
+      supported_room_actions: [],
+      can_set_override: false,
+      can_clear_override: false,
+      manual_override_active: false,
+      manual_override_target_temperature: undefined,
+      manual_override_ends_at: undefined,
+      manual_override_termination_type: undefined,
+      override_ends_at: undefined,
+    });
+
+    await element.updateComplete;
+
+    expect(textContent(element)).not.toContain("Override for 1h");
+    expect(textContent(element)).not.toContain("Resume schedule");
+    expect(callService).not.toHaveBeenCalled();
+  });
+
+  it("hides resume action when clear capability is false for an active override", async () => {
+    const element = createCard();
+    element.hass = mockHass(undefined, undefined, {
+      can_clear_override: false,
+    });
+
+    await element.updateComplete;
+
+    expect(textContent(element)).toContain("Manual override active");
+    expect(textContent(element)).not.toContain("Resume schedule");
   });
 
   it("calls backend schedule update command when user saves schedule", async () => {
@@ -228,7 +283,7 @@ describe("climate-relay-card", () => {
     const rendered = textContent(element);
     expect(rendered).toContain("Room activation is available for eligible primary climate candidates");
     expect(rendered).toContain("Daily schedule start/end editing is available");
-    expect(rendered).toContain("Override 1h remains a temporary fixed-duration scaffold");
+    expect(rendered).toContain("Override controls are rendered from backend-projected room action capabilities");
   });
 });
 
@@ -242,6 +297,7 @@ function createCard(): ClimateRelayCard {
 function mockHass(
   callService = vi.fn(),
   sendMessagePromise = vi.fn().mockResolvedValue({ candidates: [] }),
+  stateAttributes: Record<string, unknown> = {},
 ): HomeAssistantLike {
   return {
     callService,
@@ -258,11 +314,19 @@ function mockHass(
           current_temperature: 20.4,
           temperature: 21.5,
           active_control_context: "manual_override",
+          supported_room_actions: ["set_manual_override_duration", "clear_manual_override"],
+          can_set_override: true,
+          can_clear_override: true,
+          manual_override_active: true,
+          manual_override_target_temperature: 21.5,
+          manual_override_ends_at: "2026-05-10T19:30:00+02:00",
+          manual_override_termination_type: "duration",
           degradation_status: "optional_sensor_unavailable",
           next_change_at: "2026-05-10T22:00:00+02:00",
           override_ends_at: "2026-05-10T19:30:00+02:00",
           schedule_home_start: "06:00:00",
           schedule_home_end: "22:00:00",
+          ...stateAttributes,
         },
       },
     },
