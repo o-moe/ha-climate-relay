@@ -186,12 +186,20 @@ Expected coverage:
 - clear override / resume schedule
 - room tile reflects active override without raw attribute inspection
 
-Increment 3.3 covers only the initial executable scaffold: the card can call
-the existing backend set/clear override services and the frontend test verifies
-that orchestration. Full capability discovery and runtime effect coverage remain
-open.
-Increment 3.3a does not change this: `Override 1h` remains a temporary fixed
-duration scaffold, and action capability projection remains open.
+Increment 3.3c covers the first capability-driven version of this flow. Room
+climate entities project `supported_room_actions`, `can_set_override`,
+`can_clear_override`, `manual_override_active`,
+`manual_override_target_temperature`, `manual_override_ends_at`, and
+`manual_override_termination_type`. The card renders `Override for 1h` and
+`Resume schedule` from those backend-projected capabilities and continues to
+call the existing set/clear services. Frontend tests verify capability-driven
+rendering and service orchestration. The Epic 3 acceptance runner now sets an
+override through the injected card, verifies active override attributes through
+the HA API, clicks `Resume schedule`, and verifies that the override is no
+longer active.
+
+Still open: free duration selection, fixed local end time, termination at next
+schedule change, until-cleared UI, and richer frontend-facing error handling.
 
 ### UX-AT-006 Global mode acceptance
 

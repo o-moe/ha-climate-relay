@@ -19,6 +19,7 @@ DEFAULT_BASE_URL = "http://haos-test.local:8123"
 TOKEN_ENV_VAR = "HOME_ASSISTANT_TOKEN"
 EPIC_1_ACCEPTANCE_VERSION = "v0.1.0-alpha.21"
 EPIC_2_ACCEPTANCE_VERSION = "v0.2.0-alpha.30"
+EPIC_3_ACCEPTANCE_VERSION = "v0.2.0-alpha.40"
 LOCAL_ENV_FILE = Path(".env.local")
 DEFAULT_ARTIFACT_DIR = Path("artifacts") / "acceptance"
 EPIC_2_PRIMARY_CLIMATES = (
@@ -259,6 +260,57 @@ def _wait_for_room_attributes(
                 f"{expected_attributes!r}; last payload={payload!r}."
             )
         time.sleep(0.5)
+
+
+def _wait_for_room_attribute_presence(
+    *,
+    base_url: str,
+    token: str,
+    entity_id: str,
+    attribute_names: tuple[str, ...],
+    timeout_seconds: float = 20.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        payload = _request_json(
+            base_url=base_url,
+            token=token,
+            path=f"/api/states/{entity_id}",
+        )
+        if isinstance(payload, dict):
+            attributes = payload.get("attributes", {})
+            if all(attributes.get(name) not in (None, "") for name in attribute_names):
+                return
+        if time.monotonic() >= deadline:
+            raise AcceptanceError(
+                f"Timed out waiting for {entity_id} attributes "
+                f"{attribute_names!r} to be present; last payload={payload!r}."
+            )
+        time.sleep(0.5)
+
+
+def _assert_room_numeric_attribute_range(
+    *,
+    base_url: str,
+    token: str,
+    entity_id: str,
+    attribute_name: str,
+    minimum: float,
+    maximum: float,
+) -> None:
+    payload = _request_json(
+        base_url=base_url,
+        token=token,
+        path=f"/api/states/{entity_id}",
+    )
+    if not isinstance(payload, dict):
+        raise AcceptanceError(f"Expected state payload for {entity_id}.")
+    value = payload.get("attributes", {}).get(attribute_name)
+    if not isinstance(value, int | float) or not minimum <= float(value) <= maximum:
+        raise AcceptanceError(
+            f"Expected {entity_id} attribute {attribute_name!r} to be a number "
+            f"between {minimum} and {maximum}; got {value!r}."
+        )
 
 
 def _call_area_override(
@@ -791,6 +843,93 @@ await setSchedule(" schedule start", "07:15");
 await setSchedule(" schedule end", "21:45");
 await clickSave();
 await waitForCardText("Schedule saved. Waiting for Home Assistant state to update.");
+}}""".strip()
+
+
+def _gui_epic_3_override_card_code(base_url: str, card_bundle_path: Path, action: str) -> str:
+    button_text = "Override for 1h" if action == "set" else "Resume schedule"
+    return f"""async () => {{
+const baseUrl = {base_url!r};
+const cardBundlePath = {str(card_bundle_path)!r};
+const buttonText = {button_text!r};
+
+async function ensureLoggedIn() {{
+  await page.goto(baseUrl);
+  await page.waitForLoadState("domcontentloaded");
+  if (page.url().includes("/auth/authorize")) {{
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).waitFor({{ timeout: 20000 }});
+    await page.getByRole("textbox", {{ name: "Benutzername" }}).fill("codex");
+    await page.getByRole("textbox", {{ name: "Passwort" }}).fill("codex");
+    await page.getByRole("button", {{ name: "Anmelden" }}).click();
+  }}
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {{
+    await page.waitForTimeout(1000);
+    if (!page.url().includes("/auth/authorize")) {{
+      return;
+    }}
+  }}
+  throw new Error("HA login did not complete.");
+}}
+
+async function mountCard() {{
+  await page.addScriptTag({{ path: cardBundlePath, type: "module" }});
+  await page.evaluate(() => {{
+    const existing = document.querySelector("#climate-relay-acceptance-root");
+    existing?.remove();
+    const root = document.createElement("div");
+    root.id = "climate-relay-acceptance-root";
+    root.style.position = "fixed";
+    root.style.inset = "24px";
+    root.style.zIndex = "10000";
+    root.style.overflow = "auto";
+    root.style.background = "var(--primary-background-color, white)";
+    document.body.append(root);
+
+    const card = document.createElement("climate-relay-card");
+    card.setConfig({{ title: "Climate Relay Acceptance" }});
+    root.append(card);
+
+    const updateHass = () => {{
+      const homeAssistant = document.querySelector("home-assistant");
+      if (homeAssistant?.hass) {{
+        card.hass = homeAssistant.hass;
+      }}
+    }};
+    updateHass();
+    window.__climateRelayAcceptanceInterval = window.setInterval(updateHass, 500);
+  }});
+}}
+
+async function waitForCardText(text) {{
+  await page.waitForFunction(
+    (expected) => {{
+      const card = document.querySelector("climate-relay-card");
+      return card?.shadowRoot?.textContent?.includes(expected);
+    }},
+    text,
+    {{ timeout: 20000 }},
+  );
+}}
+
+async function clickCardButton(text) {{
+  await page.evaluate((expectedText) => {{
+    const card = document.querySelector("climate-relay-card");
+    const button = Array.from(card.shadowRoot.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent.includes(expectedText),
+    );
+    if (!button) {{
+      throw new Error(`Missing card button: ${{expectedText}}`);
+    }}
+    button.click();
+  }}, text);
+}}
+
+await ensureLoggedIn();
+await mountCard();
+await waitForCardText("Climate Relay Acceptance");
+await waitForCardText(buttonText);
+await clickCardButton(buttonText);
 }}""".strip()
 
 
@@ -1727,13 +1866,12 @@ def _run_epic_3(
         "--base-url",
         base_url,
     ]
-    if install_version is not None:
-        prepare_command.extend(
-            [
-                "--install-version",
-                f"update.climaterelaycore_update={install_version}",
-            ]
-        )
+    prepare_command.extend(
+        [
+            "--install-version",
+            f"update.climaterelaycore_update={install_version or EPIC_3_ACCEPTANCE_VERSION}",
+        ]
+    )
     steps = [
         (prepare_command, "Prepare HA test instance"),
         (
@@ -1808,6 +1946,71 @@ def _run_epic_3(
             env=pw_env,
             description="Run Increment 3 schedule-editing custom-card GUI regression",
         )
+        _wait_for_room_attributes(
+            base_url=base_url,
+            token=token,
+            entity_id=room_entity_id,
+            expected_attributes={
+                "schedule_home_start": "07:15:00",
+                "schedule_home_end": "21:45:00",
+            },
+        )
+        _run_command(
+            [
+                pwcli,
+                f"-s={session}",
+                "run-code",
+                _gui_epic_3_override_card_code(base_url, card_bundle_path, "set"),
+            ],
+            env=pw_env,
+            description="Run Increment 3 override custom-card GUI action",
+        )
+        _wait_for_room_attributes(
+            base_url=base_url,
+            token=token,
+            entity_id=room_entity_id,
+            expected_attributes={
+                "active_control_context": "manual_override",
+                "manual_override_active": True,
+                "manual_override_termination_type": "duration",
+            },
+        )
+        _wait_for_room_attribute_presence(
+            base_url=base_url,
+            token=token,
+            entity_id=room_entity_id,
+            attribute_names=(
+                "override_ends_at",
+                "manual_override_ends_at",
+                "manual_override_target_temperature",
+            ),
+        )
+        _assert_room_numeric_attribute_range(
+            base_url=base_url,
+            token=token,
+            entity_id=room_entity_id,
+            attribute_name="manual_override_target_temperature",
+            minimum=5.0,
+            maximum=35.0,
+        )
+        _run_command(
+            [
+                pwcli,
+                f"-s={session}",
+                "run-code",
+                _gui_epic_3_override_card_code(base_url, card_bundle_path, "clear"),
+            ],
+            env=pw_env,
+            description="Run Increment 3 resume-schedule custom-card GUI action",
+        )
+        _wait_for_room_attributes(
+            base_url=base_url,
+            token=token,
+            entity_id=room_entity_id,
+            expected_attributes={
+                "manual_override_active": False,
+            },
+        )
     except AcceptanceError:
         _capture_gui_artifact(
             pwcli=pwcli,
@@ -1823,16 +2026,6 @@ def _run_epic_3(
             env=pw_env,
             check=False,
         )
-
-    _wait_for_room_attributes(
-        base_url=base_url,
-        token=token,
-        entity_id=room_entity_id,
-        expected_attributes={
-            "schedule_home_start": "07:15:00",
-            "schedule_home_end": "21:45:00",
-        },
-    )
 
 
 def main() -> int:

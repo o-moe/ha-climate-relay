@@ -55,6 +55,12 @@ rejected as invalid schedule times.
 A later frontend-facing state provider or API should only be introduced after
 the concrete frontend consumption model has been explicitly chosen.
 
+Increment 3.3c adds minimal room action capability projection to existing room
+climate entity attributes instead of introducing a new state provider. The card
+uses those projected attributes to decide whether to render fixed-duration
+override and resume actions, while continuing to call the existing override
+services.
+
 This spike refines the target direction already documented in
 [product-ux-vision.md](./product-ux-vision.md),
 [frontend-interaction-model.md](./frontend-interaction-model.md),
@@ -169,6 +175,13 @@ state adapter, mutation API, or migration-safe profile identity contract.
 The climate entity currently exposes these frontend-relevant attributes:
 
 - `active_control_context`
+- `supported_room_actions`
+- `can_set_override`
+- `can_clear_override`
+- `manual_override_active`
+- `manual_override_target_temperature`
+- `manual_override_ends_at`
+- `manual_override_termination_type`
 - `primary_climate_entity_id`
 - `humidity_entity_id`
 - `window_entity_id`
@@ -541,7 +554,10 @@ Required room state:
   targeted profile.
 - Existing implementation support: `set_area_override` service and
   `GlobalRuntime.async_set_area_override(...)`.
-- Missing implementation work: expose supported termination capabilities and
+- Increment 3.3c implementation support: room climate entity attributes expose
+  the minimal supported card action (`set_manual_override_duration`) and
+  whether set override is currently available.
+- Missing implementation work: expose richer termination capabilities and
   consider structured frontend errors.
 - Required tests: override set behavior through backend action, invalid
   termination combinations, unknown room, targeted notification only,
@@ -556,8 +572,11 @@ Required room state:
   profile.
 - Existing implementation support: `clear_area_override` service and
   `GlobalRuntime.async_clear_area_override(...)`.
-- Missing implementation work: expose whether clear/resume is currently relevant
-  in room state.
+- Increment 3.3c implementation support: room climate entity attributes expose
+  `can_clear_override` and active manual override details so the frontend does
+  not infer lifecycle state from rules or timestamps.
+- Missing implementation work: stable room action identity and richer
+  frontend-facing error handling.
 - Required tests: override clear behavior through backend action, unknown room,
   idempotence or explicit error policy, frontend-facing state after clear.
 

@@ -27,6 +27,13 @@ export type ClimateRelayRoomTile = {
   currentTemperature?: number;
   targetTemperature?: number;
   activeControlContext?: string;
+  supportedRoomActions: string[];
+  canSetOverride: boolean;
+  canClearOverride: boolean;
+  manualOverrideActive: boolean;
+  manualOverrideTargetTemperature?: number;
+  manualOverrideEndsAt?: string;
+  manualOverrideTerminationType?: string;
   degradationStatus?: string;
   nextChangeAt?: string;
   overrideEndsAt?: string;

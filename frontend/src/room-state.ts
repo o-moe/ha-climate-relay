@@ -26,6 +26,16 @@ function toRoomTile(state: HomeAssistantState): ClimateRelayRoomTile {
     currentTemperature: numberAttribute(state, "current_temperature"),
     targetTemperature: numberAttribute(state, "temperature"),
     activeControlContext: stringAttribute(state, "active_control_context"),
+    supportedRoomActions: stringListAttribute(state, "supported_room_actions"),
+    canSetOverride: booleanAttribute(state, "can_set_override"),
+    canClearOverride: booleanAttribute(state, "can_clear_override"),
+    manualOverrideActive: booleanAttribute(state, "manual_override_active"),
+    manualOverrideTargetTemperature: numberAttribute(
+      state,
+      "manual_override_target_temperature",
+    ),
+    manualOverrideEndsAt: stringAttribute(state, "manual_override_ends_at"),
+    manualOverrideTerminationType: stringAttribute(state, "manual_override_termination_type"),
     degradationStatus: stringAttribute(state, "degradation_status"),
     nextChangeAt: stringAttribute(state, "next_change_at"),
     overrideEndsAt: stringAttribute(state, "override_ends_at"),
@@ -42,4 +52,16 @@ function stringAttribute(state: HomeAssistantState, key: string): string | undef
 function numberAttribute(state: HomeAssistantState, key: string): number | undefined {
   const value = state.attributes[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanAttribute(state: HomeAssistantState, key: string): boolean {
+  return state.attributes[key] === true;
+}
+
+function stringListAttribute(state: HomeAssistantState, key: string): string[] {
+  const value = state.attributes[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string");
 }
