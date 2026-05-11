@@ -276,8 +276,8 @@ export class ClimateRelayCard extends LitElement {
           ${this._renderMetric("Current", formatTemperature(room.currentTemperature))}
           ${this._renderMetric("Target", formatTemperature(room.targetTemperature))}
           ${this._renderMetric("Context", room.activeControlContext)}
-          ${this._renderMetric("Override target", formatTemperature(room.manualOverrideTargetTemperature))}
-          ${this._renderMetric("Override ends", room.manualOverrideEndsAt)}
+          ${this._renderMetric("Manual override target", formatTemperature(room.manualOverrideTargetTemperature))}
+          ${this._renderMetric("Manual override ends", room.manualOverrideEndsAt)}
           ${this._renderMetric("Degradation", room.degradationStatus)}
           ${this._renderMetric("Next change", room.nextChangeAt)}
           ${this._renderMetric("Override ends", room.manualOverrideEndsAt ? undefined : room.overrideEndsAt)}

@@ -38,9 +38,26 @@ describe("climate-relay-card", () => {
     expect(rendered).toContain("2026-05-10T19:30:00+02:00");
     expect(rendered).toContain("06:00:00");
     expect(rendered).toContain("22:00:00");
+    expect(rendered).toContain("Manual override target");
+    expect(rendered).toContain("Manual override ends");
+    expect(metricLabels(element).filter((label) => label === "Override ends")).toHaveLength(0);
     expect(rendered).toContain("Manual override active");
     expect(rendered).toContain("Target 21.5 °C");
     expect(rendered).toContain("Resume schedule");
+  });
+
+  it("renders generic override end only when no manual override end is projected", async () => {
+    const element = createCard();
+    element.hass = mockHass(undefined, undefined, {
+      manual_override_ends_at: undefined,
+    });
+
+    await element.updateComplete;
+
+    const labels = metricLabels(element);
+    expect(labels).toContain("Override ends");
+    expect(labels).not.toContain("Manual override ends");
+    expect(labels.filter((label) => label === "Override ends")).toHaveLength(1);
   });
 
   it("renders candidate section when backend returns candidates", async () => {
@@ -335,6 +352,12 @@ function mockHass(
 
 function textContent(element: Element): string {
   return element.shadowRoot?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function metricLabels(element: Element): string[] {
+  return Array.from(element.shadowRoot?.querySelectorAll("dt") ?? []).map(
+    (label) => label.textContent?.trim() ?? "",
+  );
 }
 
 async function waitForUpdates(element: ClimateRelayCard): Promise<void> {

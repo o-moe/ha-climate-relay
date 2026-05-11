@@ -48,9 +48,10 @@ is always available.
 - Override and resume buttons call the existing
   `climate_relay_core.set_area_override` and
   `climate_relay_core.clear_area_override` services.
-- The set-override button is shown only when `can_set_override` is true and is
-  labeled `Override for 1h` because this increment still supports only the
-  minimal fixed-duration card action.
+- The set-override button is shown only when `can_set_override` is true. In
+  this increment, `can_set_override` means only that the backend projects the
+  minimal `set_manual_override_duration` action for the room. The card labels
+  that action `Override for 1h` and uses a fixed one-hour duration.
 - The resume button is shown only when `can_clear_override` is true.
 - Candidate discovery uses the `climate_relay_core/room_candidates` WebSocket
   command and returns area/climate candidates with backend-owned availability
@@ -106,6 +107,10 @@ through room climate entity attributes. The card can set a one-hour duration
 override through the existing service only when `can_set_override` is true. It
 renders active manual override state from backend attributes and does not
 evaluate the override lifecycle itself.
+
+This is not yet a comprehensive override capability policy. The only projected
+set action is `set_manual_override_duration`, which the card currently maps to
+a fixed one-hour duration.
 
 The existing override services currently accept an area ID, profile ID, or
 primary climate entity ID through the `area_id` service field. The card uses the

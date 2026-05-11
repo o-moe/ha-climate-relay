@@ -59,7 +59,10 @@ Increment 3.3c adds minimal room action capability projection to existing room
 climate entity attributes instead of introducing a new state provider. The card
 uses those projected attributes to decide whether to render fixed-duration
 override and resume actions, while continuing to call the existing override
-services.
+services. The only set-override action projected in this increment is
+`set_manual_override_duration`; `can_set_override` means that this minimal
+duration action is available, not that all override termination variants have a
+complete frontend capability policy.
 
 This spike refines the target direction already documented in
 [product-ux-vision.md](./product-ux-vision.md),
@@ -556,9 +559,10 @@ Required room state:
   `GlobalRuntime.async_set_area_override(...)`.
 - Increment 3.3c implementation support: room climate entity attributes expose
   the minimal supported card action (`set_manual_override_duration`) and
-  whether set override is currently available.
-- Missing implementation work: expose richer termination capabilities and
-  consider structured frontend errors.
+  whether that duration-based action is currently available. The card maps this
+  minimal action to a fixed one-hour override.
+- Missing implementation work: expose richer termination capabilities, define a
+  fuller capability policy, and consider structured frontend errors.
 - Required tests: override set behavior through backend action, invalid
   termination combinations, unknown room, targeted notification only,
   frontend-facing state after override.

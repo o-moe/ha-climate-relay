@@ -192,14 +192,19 @@ climate entities project `supported_room_actions`, `can_set_override`,
 `manual_override_target_temperature`, `manual_override_ends_at`, and
 `manual_override_termination_type`. The card renders `Override for 1h` and
 `Resume schedule` from those backend-projected capabilities and continues to
-call the existing set/clear services. Frontend tests verify capability-driven
-rendering and service orchestration. The Epic 3 acceptance runner now sets an
-override through the injected card, verifies active override attributes through
-the HA API, clicks `Resume schedule`, and verifies that the override is no
-longer active.
+call the existing set/clear services. The projected set action is deliberately
+minimal: `set_manual_override_duration`, currently used by the card as a fixed
+one-hour override. `can_set_override` is therefore not yet a complete policy for
+all override variants. Frontend tests verify capability-driven rendering and
+service orchestration. The Epic 3 acceptance runner now sets an override
+through the injected card, verifies active override attributes through the HA
+API, clicks `Resume schedule`, and verifies that the override is no longer
+active.
 
 Still open: free duration selection, fixed local end time, termination at next
-schedule change, until-cleared UI, and richer frontend-facing error handling.
+schedule change, until-cleared UI, richer room configuration, room
+update/disable, persistence/reload acceptance, and richer frontend-facing error
+handling.
 
 ### UX-AT-006 Global mode acceptance
 

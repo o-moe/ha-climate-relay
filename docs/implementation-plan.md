@@ -383,7 +383,9 @@ room-management operations required by that GUI slice.
   temperature, end timestamp, and termination type. The card renders
   `Override for 1h` only from `can_set_override`, renders `Resume schedule`
   only from `can_clear_override`, and displays active override values from
-  backend-owned state.
+  backend-owned state. In this increment, `can_set_override` means the backend
+  projects the minimal `set_manual_override_duration` action for the room; it
+  is not a complete policy for all override termination variants.
 - Action contract: the card continues to orchestrate the existing
   `set_area_override` and `clear_area_override` services. The `area_id` service
   field still accepts a HA area ID, profile ID, or primary climate entity ID as

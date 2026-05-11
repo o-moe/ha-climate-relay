@@ -46,6 +46,7 @@ from .const import (
 from .domain import (
     ClimateCapabilities,
     EffectiveTarget,
+    ManualOverride,
     resolve_regulation_state,
     resolve_window_action,
 )
@@ -199,14 +200,11 @@ class ClimateRelayCoreRoomClimateEntity(ClimateEntity):
     def extra_state_attributes(self) -> dict[str, object]:
         """Expose sparse explanatory profile context."""
         manual_override = self._manual_override
-        supported_room_actions = [ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION]
-        if manual_override is not None:
-            supported_room_actions.append(ROOM_ACTION_CLEAR_MANUAL_OVERRIDE)
+        supported_room_actions = _supported_room_actions(manual_override)
         attrs = {
             ATTR_ACTIVE_CONTROL_CONTEXT: self._active_control_context,
             ATTR_SUPPORTED_ROOM_ACTIONS: supported_room_actions,
-            ATTR_CAN_SET_OVERRIDE: ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION
-            in supported_room_actions,
+            ATTR_CAN_SET_OVERRIDE: _can_set_manual_override_duration(supported_room_actions),
             ATTR_CAN_CLEAR_OVERRIDE: manual_override is not None,
             ATTR_MANUAL_OVERRIDE_ACTIVE: manual_override is not None,
             ATTR_PRIMARY_CLIMATE_ENTITY_ID: self._room_config.primary_climate_entity_id,
@@ -473,6 +471,19 @@ def _is_unavailable(state) -> bool:  # type: ignore[no-untyped-def]
     if state is None:
         return False
     return str(state.state) in {"unknown", "unavailable"}
+
+
+def _supported_room_actions(manual_override: ManualOverride | None) -> list[str]:
+    """Return the minimal room action projection supported by this increment."""
+    actions = [ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION]
+    if manual_override is not None:
+        actions.append(ROOM_ACTION_CLEAR_MANUAL_OVERRIDE)
+    return actions
+
+
+def _can_set_manual_override_duration(supported_room_actions: list[str]) -> bool:
+    """Return whether the minimal duration override action is projected."""
+    return ROOM_ACTION_SET_MANUAL_OVERRIDE_DURATION in supported_room_actions
 
 
 def _is_open_window_state(state) -> bool:  # type: ignore[no-untyped-def]
