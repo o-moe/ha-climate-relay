@@ -165,7 +165,7 @@ schedule-editing GUI path. The runner loads ignored local `.env.local` values
 for `HOME_ASSISTANT_TOKEN` when needed. Reload persistence remains an explicit
 acceptance gap for this custom-card flow.
 
-Local acceptance passed on 2026-05-10 against `v0.2.0-alpha.37` on the
+Local acceptance passed on 2026-05-10 against `v0.2.0-alpha.38` on the
 dedicated HA test instance. The run installed the alpha pre-release, restarted
 Home Assistant, performed the authenticated API smoke test, built and injected
 the custom card, edited schedule start/end through the GUI, and verified the
